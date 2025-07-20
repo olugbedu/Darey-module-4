@@ -1,118 +1,138 @@
-# Docker Container Management Guide
+# Jenkins CI/CD Learning Path
 
-## Introduction
+## Introduction to CI/CD
 
-Docker containers are **portable, self-contained units** that encapsulate applications and their dependencies. They enable consistent environments across development, testing, and production. This guide walks you through the essential steps for managing Docker containers, from pulling images to cleaning up resources.
-
----
-
-## 1. Running Containers
-
-### Pulling an Image
-
-Before running a container, you may need to **pull the image** from Docker Hub or another registry:
-
-```bash
-docker pull ubuntu
-```
-
-### Running a Container
-
-To start a container from an image:
-
-```bash
-docker run <image_name>
-```
-
-**Example:** Running an Ubuntu container:
-
-```bash
-docker run ubuntu
-```
+**Continuous Integration and Continuous Delivery (CI/CD)** are best practices that automate the software development lifecycle. CI/CD enhances efficiency, stability, and deployment speed by enabling frequent code integration, automated testing, and reliable deployment pipelines [[1]][[5]].
 
 ---
 
-## 2. Customizing Container Behavior
+## What is Jenkins?
 
-You can modify how containers run using various options:
-
-- **Map Ports:** `-p <host_port>:<container_port>`
-- **Set Environment Variables:** `-e VAR=value`
-- **Run in Detached Mode:** `-d` (runs in the background)
-
-**Example:** Run an Nginx container, mapping port 8080 on your host to port 80 in the container, in detached mode:
-
-```bash
-docker run -d -p 8080:80 nginx
-```
+**Jenkins** is an open-source automation server that automates building, testing, and deploying applications. It supports pipelines to define entire workflows, integrates with version control systems for automatic builds, and offers an extensive plugin ecosystem for customization [[2]][[3]][[9]][[10]].
 
 ---
 
-## 3. Managing Container Lifecycle
+## Installation Guide
 
-| Command                | Description                          |
-|------------------------|--------------------------------------|
-| `docker start`         | Start a stopped container            |
-| `docker stop`          | Stop a running container             |
-| `docker restart`       | Restart a container                  |
-| `docker rm`            | Remove a container (image persists)  |
+### Prerequisites
 
----
+- Completed foundational programs 1-3
+- System with JDK installed
 
-## 4. Practical Task: Container Operations
+### Installation Steps
 
-### Start a Container and Run a Command
+1. **Update package repositories:**
+    ```bash
+    sudo apt-get update
+    ```
 
-Run a container and execute a command (e.g., display system info):
+2. **Install JDK:**
+    ```bash
+    sudo apt-get install default-jdk
+    ```
 
-```bash
-docker run ubuntu uname -a
-```
+3. **Add Jenkins repository and install:**
+    ```bash
+    sudo wget -O /usr/share/keyrings/jenkins-keyring.asc \
+      https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+    echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc]" \
+      https://pkg.jenkins.io/debian-stable binary/ | sudo tee \
+      /etc/apt/sources.list.d/jenkins.list > /dev/null
+    sudo apt-get update
+    sudo apt-get install jenkins
+    ```
 
-### Stop and Inspect
+4. **Verify installation:**
+    ```bash
+    sudo systemctl status jenkins
+    ```
 
-Stop a running container and check its status:
+5. **Access Jenkins web console:**
+    ```
+    http://<public-ip>:8080
+    ```
 
-```bash
-docker stop <container_id>
-docker ps -a
-```
-
-### Restart and Observe
-
-Restart the container:
-
-```bash
-docker restart <container_id>
-```
-
-### Cleanup
-
-Remove the container:
-
-```bash
-docker rm <container_id>
-```
-
----
-
-## 5. Key Notes
-
-- **Containers are ephemeral:** Changes inside a container are lost unless you commit them to a new image or use volumes for persistent data.
-- **Images persist:** Removing a container does not delete its image from your system.
+6. **Retrieve initial admin password:**
+    ```bash
+    sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+    ```
 
 ---
 
-## 6. Common Errors & Fixes
+## Project Goals
 
-- **"Image not found":** Pull the image first using `docker pull <image_name>`.
-- **Port conflicts:** Use a different host port, e.g., `-p 8081:80`.
+By completing this learning path, you will:
+
+- Understand CI/CD principles and their benefits
+- Install and configure Jenkins
+- Create and manage Jenkins jobs
+- Automate software builds and tests
+- Implement deployment pipelines
+- Integrate with version control systems
 
 ---
 
-## 7. Next Steps
+## Getting Started with Jenkins
 
-- **Learn about Docker volumes** for persistent data storage.
-- **Explore Docker Compose** for managing multi-container applications.
+### Initial Setup
+
+1. **Install required plugins:**
+    - Navigate to **Manage Jenkins > Plugins**
+    - Install suggested plugins or select specific ones
+
+2. **Create admin user:**
+    - Set up credentials after initial login
+
+3. **Configure security:**
+    - Set up appropriate security groups
+    - Ensure port 8080 is accessible
 
 ---
+
+### Basic Operations
+
+- **Create your first job:**
+    - Go to **New Item > Enter name > Select "Freestyle project"**
+    - Configure source code management (Git, SVN)
+    - Set build triggers
+    - Add build steps (shell commands, etc.)
+
+- **Pipeline creation:**
+    - Define a `Jenkinsfile` with stages
+    - Configure build, test, and deploy steps
+
+---
+
+## Common Tasks Checklist
+
+- [ ] Install Jenkins
+- [ ] Configure security settings
+- [ ] Install necessary plugins
+- [ ] Create admin user account
+- [ ] Connect to version control
+- [ ] Create first build job
+- [ ] Test pipeline execution
+- [ ] Configure deployment steps
+
+---
+
+## Troubleshooting
+
+- **Port conflicts:** Change Jenkins port in `/etc/default/jenkins`
+- **Connection issues:** Verify security group rules
+- **Plugin errors:** Check compatibility and versions
+- **Build failures:** Review console output for errors
+
+---
+
+## Next Steps
+
+- Explore advanced pipeline syntax
+- Learn about Jenkins agents/distributed builds
+- Implement blue-green deployments
+- Set up monitoring for Jenkins
+
+---
+
+**Congratulations!**  
+You are now ready to start your journey with Jenkins and CI/CD. Happy automating!
