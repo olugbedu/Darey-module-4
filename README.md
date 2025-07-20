@@ -1,133 +1,118 @@
-# Working with Docker Images – Learning Path Guide
+# Docker Container Management Guide
 
-This guide walks through the steps taken to understand and implement Docker-based workflows, including image creation, container deployment, and Docker Hub integration. It provides hands-on instructions aligned with the learning objectives.
+## Introduction
+
+Docker containers are **portable, self-contained units** that encapsulate applications and their dependencies. They enable consistent environments across development, testing, and production. This guide walks you through the essential steps for managing Docker containers, from pulling images to cleaning up resources.
 
 ---
 
-## 1. Introduction to Docker Images
+## 1. Running Containers
 
-Docker images are portable packages that contain everything needed to run an application—code, runtime, libraries, and system tools.
+### Pulling an Image
 
-### Key Concepts
-
-- **Images** are built using instructions in a `Dockerfile`.
-- **Docker Hub** serves as a registry of prebuilt Docker images.
-
-### Useful Commands
+Before running a container, you may need to **pull the image** from Docker Hub or another registry:
 
 ```bash
-docker pull nginx             # Pull the official NGINX image
-docker search nginx           # Search Docker Hub for images
-docker images                 # List downloaded images
+docker pull ubuntu
 ```
 
----
+### Running a Container
 
-## 2. Creating a Dockerfile
-
-The `Dockerfile` is a configuration script used to build Docker images. Below is a sample Dockerfile that sets up an NGINX web server.
-
-### Example Dockerfile
-
-```Dockerfile
-FROM nginx:latest
-WORKDIR /usr/share/nginx/html/
-COPY index.html /usr/share/nginx/html/
-EXPOSE 80
-```
-
-### Breakdown
-
-- `FROM`: Specifies the base image (nginx).
-- `WORKDIR`: Sets the working directory in the container.
-- `COPY`: Transfers files into the container.
-- `EXPOSE`: Documents the app’s port.
-
----
-
-## 3. Building and Running Containers
-
-### Step-by-Step
-
-1. **Build the Image**
+To start a container from an image:
 
 ```bash
-docker build -t my-nginx-image .
+docker run <image_name>
 ```
 
-2. **Run the Container**
+**Example:** Running an Ubuntu container:
 
 ```bash
-docker run -d -p 8080:80 my-nginx-image
-```
-
-3. **Check Running Containers**
-
-```bash
-docker ps
-```
-
-This command verifies that your container is up and running on port `8080`.
-
----
-
-## 4. Pushing Images to Docker Hub
-
-To share your Docker image:
-
-1. **Create a Docker Hub account and repository**  
-2. **Tag the Image**
-
-```bash
-docker tag my-nginx-image yourusername/my-nginx-image:latest
-```
-
-3. **Push to Docker Hub**
-
-```bash
-docker push yourusername/my-nginx-image:latest
+docker run ubuntu
 ```
 
 ---
 
-## 5. Managing Security and Networking
+## 2. Customizing Container Behavior
 
-When deploying on cloud servers (e.g., AWS EC2):
+You can modify how containers run using various options:
 
-- Ensure **security groups** allow HTTP traffic (port 80).
-- Manage containers with Docker commands:
+- **Map Ports:** `-p <host_port>:<container_port>`
+- **Set Environment Variables:** `-e VAR=value`
+- **Run in Detached Mode:** `-d` (runs in the background)
+
+**Example:** Run an Nginx container, mapping port 8080 on your host to port 80 in the container, in detached mode:
 
 ```bash
-docker stop <container_id>    # Stop container
-docker rm <container_id>      # Remove container
+docker run -d -p 8080:80 nginx
 ```
 
 ---
 
-## 6. Additional Notes
+## 3. Managing Container Lifecycle
 
-- **Datasets and Testing**: Build images with included datasets for full testing.
-- **Remote Access**: Use `http://datasheet.com/` for component references.
-- **Comment your steps** for documentation and reproducibility.
-
----
-
-## Key Docker Commands Summary
-
-| Command                                      | Description                                 |
-|---------------------------------------------|---------------------------------------------|
-| `docker pull <image>`                       | Download an image from Docker Hub           |
-| `docker build -t <name> .`                  | Build image from Dockerfile                 |
-| `docker run -d -p <host>:<container> <img>` | Run container on specified ports            |
-| `docker tag <img> <user>/<repo>:<tag>`      | Tag image for pushing to Docker Hub         |
-| `docker push <user>/<repo>:<tag>`           | Push image to Docker Hub                    |
-| `docker stop <container_id>`                | Stop a running container                    |
-| `docker rm <container_id>`                  | Remove a stopped container                  |
+| Command                | Description                          |
+|------------------------|--------------------------------------|
+| `docker start`         | Start a stopped container            |
+| `docker stop`          | Stop a running container             |
+| `docker restart`       | Restart a container                  |
+| `docker rm`            | Remove a container (image persists)  |
 
 ---
 
-## Outcome
+## 4. Practical Task: Container Operations
 
-By following these steps, a basic understanding of Docker workflows—image creation, container management, security, and deployment—has been achieved.
+### Start a Container and Run a Command
+
+Run a container and execute a command (e.g., display system info):
+
+```bash
+docker run ubuntu uname -a
+```
+
+### Stop and Inspect
+
+Stop a running container and check its status:
+
+```bash
+docker stop <container_id>
+docker ps -a
+```
+
+### Restart and Observe
+
+Restart the container:
+
+```bash
+docker restart <container_id>
+```
+
+### Cleanup
+
+Remove the container:
+
+```bash
+docker rm <container_id>
+```
+
+---
+
+## 5. Key Notes
+
+- **Containers are ephemeral:** Changes inside a container are lost unless you commit them to a new image or use volumes for persistent data.
+- **Images persist:** Removing a container does not delete its image from your system.
+
+---
+
+## 6. Common Errors & Fixes
+
+- **"Image not found":** Pull the image first using `docker pull <image_name>`.
+- **Port conflicts:** Use a different host port, e.g., `-p 8081:80`.
+
+---
+
+## 7. Next Steps
+
+- **Learn about Docker volumes** for persistent data storage.
+- **Explore Docker Compose** for managing multi-container applications.
 
 ---
