@@ -1,105 +1,170 @@
+# Kubernetes Deployment and Service with YAML
 
-# Working with Kubernetes Pods and Containers
+## Introduction to YAML
 
-## Pods in Kubernetes
+A Kubernetes YAML file is a configuration file written in YAML format that describes Kubernetes resources. These files specify the desired state of resources like Pods, Services, and Deployments. YAML is human-readable and uses indentation to denote structure [[4]].
 
-### Definition and Purpose
-A Pod in Kubernetes is like a small container for running parts of an application. It can have one or more containers inside it that work closely together. These containers share the same network and storage, which makes them communicate and cooperate easily. A Pod is the smallest thing you can create and manage in Kubernetes. In Minkabe, which is a tool to run Kubernetes easily, Pods are used to set up, change the size, and control applications.
+### Basic YAML Structure
+
+YAML supports several data types and structures:
+
+- **Strings:**
+  ```yaml
+  name: State line
+  ID: org
+  ```
+
+- **Numbers:**
+  ```yaml
+  args: 25
+  ```
+
+- **Booleans:**
+  ```yaml
+  Kubernetes: true
+  ```
+
+- **Lists (arrays):**
+  ```yaml
+  fruits:
+    - apple
+    - banana
+    - orange
+  ```
+
+- **Maps (key-value pairs):**
+  ```yaml
+  person:
+    name: Alice
+    age: 30
+  ```
+
+- **Nested Structures:**
+  ```yaml
+  employees:
+    name: John Doe
+    position: developer
+    skills:
+      - Python
+      - JavaScript
+  ```
+
+- **Comments:**
+  ```yaml
+  # This is a comment
+  key: value
+  ```
+
+- **Multiline Strings:**
+  ```yaml
+  description: |
+    This is a multiline
+    string in YAML.
+  ```
 
 ---
 
-## Prerequisites
+## Deploying Applications in Kubernetes
 
-- Install Docker
-- Install Minikube: https://minikube.sigs.k8s.io/docs/start/
-- Install kubectl: https://kubernetes.io/docs/tasks/tools/
+### Deployment in Kubernetes
 
-Start Minikube:
-```bash
-minikube start
-```
+A Deployment provides a blueprint for the desired state of your app and ensures Kubernetes manages it correctly. It allows you to declaratively manage and scale a group of identical pods [[2]][[3]].
+
+### Services in Kubernetes
+
+Kubernetes Services expose Pods to the network:
+
+- **ClusterIP:** Default, internal access only.
+- **NodePort:** Exposes service on a static port.
+- **LoadBalancer:** Uses external load balancer.
 
 ---
 
-## Step 1: Define a Pod with Containers
+## Working With YAML Files
 
-Create a file named `pod.yaml` with the following content:
+1. **Create a directory** named `my-nginx-yaml`.
+2. **Inside, create `nginx-deployment.yaml`:**
 
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: myapp-pod
-  labels:
-    app: myapp
-spec:
-  containers:
-    - name: myapp-container
-      image: nginx
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: my-nginx-deployment
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: my-nginx
+      template:
+        metadata:
+          labels:
+            app: my-nginx
+        spec:
+          containers:
+          - name: my-nginx
+            image: dareyregistry/my-nginx:1.0
+            ports:
+            - containerPort: 80
+    ```
+
+3. **Then, create `nginx-service.yaml`:**
+
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: my-nginx-service
+    spec:
+      selector:
+        app: my-nginx
       ports:
-        - containerPort: 80
-```
+        - protocol: TCP
+          port: 80
+          targetPort: 80
+      type: NodePort
+    ```
 
 ---
 
-## Step 2: Deploy the Pod
+## Apply and Verify
 
-Run the command below to apply the YAML configuration and deploy the Pod:
+### Apply YAMLs
 
 ```bash
-kubectl apply -f pod.yaml
+kubectl apply -f nginx-deployment.yaml
+kubectl apply -f nginx-service.yaml
 ```
 
----
-
-## Step 3: View Pods
-
-List all running Pods:
+### 🔍 Verify Resources
 
 ```bash
-kubectl get pods
+kubectl get deployments
+kubectl get services
 ```
 
----
-
-## Step 4: Inspect a Pod
-
-To describe the Pod and get detailed info (like events, state, container logs):
+**Expected output:**
 
 ```bash
-kubectl describe pod myapp-pod
+NAME                   READY   UP-TO-DATE   AVAILABLE   AGE
+my-nginx-deployment    1/1     1            1           4m
+
+NAME                 TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+my-nginx-service     NodePort   10.111.184.164  <none>        80:31241/TCP     4m
 ```
 
 ---
 
-## Step 5: Interact with the Pod
-
-To execute commands inside the Pod:
+## Accessing the Application
 
 ```bash
-kubectl exec -it myapp-pod -- /bin/bash
+minikube service my-nginx-service --url
 ```
 
----
-
-## Step 6: Delete the Pod
-
-To delete the Pod:
+**Output:**
 
 ```bash
-kubectl delete pod myapp-pod
+http://127.0.0.1:55077
 ```
 
----
+> You can open this URL in your browser to view the Nginx page.
 
-## Notes
-
-- Pods are **ephemeral** – changes made inside a running Pod will be lost if it’s deleted.
-- Use **Deployments** for managing Pod replicas and auto-recovery.
-- For persistent data, consider using **Volumes**.
-
----
-
-## Conclusion
-
-This guide demonstrated how to create, inspect, and delete Kubernetes Pods using `kubectl` on Minikube, including YAML configuration for defining containers inside a Pod.
