@@ -1,170 +1,125 @@
-# Kubernetes Deployment and Service with YAML
+# Kubernetes Networking and Multi-Container Pod Demonstration
 
-## Introduction to YAML
-
-A Kubernetes YAML file is a configuration file written in YAML format that describes Kubernetes resources. These files specify the desired state of resources like Pods, Services, and Deployments. YAML is human-readable and uses indentation to denote structure [[4]].
-
-### Basic YAML Structure
-
-YAML supports several data types and structures:
-
-- **Strings:**
-  ```yaml
-  name: State line
-  ID: org
-  ```
-
-- **Numbers:**
-  ```yaml
-  args: 25
-  ```
-
-- **Booleans:**
-  ```yaml
-  Kubernetes: true
-  ```
-
-- **Lists (arrays):**
-  ```yaml
-  fruits:
-    - apple
-    - banana
-    - orange
-  ```
-
-- **Maps (key-value pairs):**
-  ```yaml
-  person:
-    name: Alice
-    age: 30
-  ```
-
-- **Nested Structures:**
-  ```yaml
-  employees:
-    name: John Doe
-    position: developer
-    skills:
-      - Python
-      - JavaScript
-  ```
-
-- **Comments:**
-  ```yaml
-  # This is a comment
-  key: value
-  ```
-
-- **Multiline Strings:**
-  ```yaml
-  description: |
-    This is a multiline
-    string in YAML.
-  ```
+This project demonstrates core concepts of Kubernetes networking through the deployment of a multi-container pod. The configuration and steps below highlight how networking works within a Kubernetes pod, using tools like `kubectl`, `nginx`, and `busybox`.
 
 ---
 
-## Deploying Applications in Kubernetes
+## Key Concepts in Kubernetes Networking
 
-### Deployment in Kubernetes
+### 1. Pod Networking
+- All containers within a pod share the same network namespace.
+- They can communicate via `localhost`.
 
-A Deployment provides a blueprint for the desired state of your app and ensures Kubernetes manages it correctly. It allows you to declaratively manage and scale a group of identical pods [[2]][[3]].
+### 2. Service Networking
+- Kubernetes Services expose a set of Pods under one stable endpoint.
+- They can be internal (ClusterIP) or external (LoadBalancer, NodePort, Ingress).
 
-### Services in Kubernetes
+### 3. Pod-to-Pod Communication
+- Kubernetes uses an overlay network that allows direct communication across nodes.
 
-Kubernetes Services expose Pods to the network:
+### 4. Ingress
+- Ingress manages external access to services in the cluster using rules.
 
-- **ClusterIP:** Default, internal access only.
-- **NodePort:** Exposes service on a static port.
-- **LoadBalancer:** Uses external load balancer.
+### 5. Network Policies
+- Policies allow fine-grained control over pod communication.
 
----
-
-## Working With YAML Files
-
-1. **Create a directory** named `my-nginx-yaml`.
-2. **Inside, create `nginx-deployment.yaml`:**
-
-    ```yaml
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: my-nginx-deployment
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app: my-nginx
-      template:
-        metadata:
-          labels:
-            app: my-nginx
-        spec:
-          containers:
-          - name: my-nginx
-            image: dareyregistry/my-nginx:1.0
-            ports:
-            - containerPort: 80
-    ```
-
-3. **Then, create `nginx-service.yaml`:**
-
-    ```yaml
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: my-nginx-service
-    spec:
-      selector:
-        app: my-nginx
-      ports:
-        - protocol: TCP
-          port: 80
-          targetPort: 80
-      type: NodePort
-    ```
+### 6. Container Network Interface (CNI)
+- Kubernetes supports multiple CNI plugins for extensible network capabilities.
 
 ---
 
-## Apply and Verify
+## YAML Snippet for Multi-Container Pod
 
-### Apply YAMLs
-
-```bash
-kubectl apply -f nginx-deployment.yaml
-kubectl apply -f nginx-service.yaml
+```yaml
+apiVersion: v1  
+kind: Pod  
+metadata:  
+  name: multi-container-pod  
+spec:  
+  containers:  
+  - name: container-1  
+    image: nginx  
+  - name: container-2  
+    image: busybox  
+    command:  
+      - /bin/sh  
+      - -c  
+      - "while true; do echo 'Hello from Container 2' >> /usr/share/nginx/html/index.html; sleep 10; done"
 ```
 
-### 🔍 Verify Resources
-
-```bash
-kubectl get deployments
-kubectl get services
-```
-
-**Expected output:**
-
-```bash
-NAME                   READY   UP-TO-DATE   AVAILABLE   AGE
-my-nginx-deployment    1/1     1            1           4m
-
-NAME                 TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
-my-nginx-service     NodePort   10.111.184.164  <none>        80:31241/TCP     4m
-```
+### Explanation
+- **container-1** runs an Nginx server.
+- **container-2** appends text into the Nginx HTML file every 10 seconds.
+- They share a volume and network namespace.
 
 ---
 
-## Accessing the Application
+## Steps to Deploy and Verify
+
+### 1. Apply Configuration
 
 ```bash
-minikube service my-nginx-service --url
+kubectl apply -f multi-container-pod.yaml
 ```
 
 **Output:**
-
 ```bash
-http://127.0.0.1:55077
+pod/multi-container-pod created
 ```
 
-> You can open this URL in your browser to view the Nginx page.
+### 2. Check Pod Status
 
+```bash
+kubectl get pods
+```
+
+**Output:**
+```bash
+NAME                  READY   STATUS    RESTARTS   AGE
+multi-container-pod   2/2     Running   0          2m
+```
+
+### 3. View Logs
+
+#### Container-1 (nginx):
+```bash
+kubectl logs multi-container-pod -c container-1
+```
+
+#### Container-2 (busybox):
+```bash
+kubectl logs multi-container-pod -c container-2
+```
+
+### 4. Exec into BusyBox to Verify Nginx Content
+
+```bash
+kubectl exec -it multi-container-pod -c container-2 -- /bin/sh
+```
+
+Then inside the shell:
+```sh
+cd /usr/share/nginx/html
+cat index.html
+```
+
+**Output:**
+```
+Hello from Container 2
+Hello from Container 2
+... repeated ...
+```
+
+---
+
+## Summary
+
+- Both containers within the pod share a network namespace.
+- BusyBox writes to a file served by Nginx.
+- Nginx serves the HTML which can be accessed internally via `localhost`.
+
+---
+
+## Learning Outcome
+
+This task reinforces how Kubernetes pod-level networking works and how containers within a pod can interact and share data.
