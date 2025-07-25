@@ -1,29 +1,60 @@
 provider "aws" {
-  region = "us-east-1" # Change to your preferred AWS region
+  region = "us-east-1" # Change this to your desired AWS region
 }
 
-# Create EC2 Instance
-resource "aws_instance" "my_ec2_spec" {
-  ami           = "ami-0c55b159cbfafe1d0" # Amazon Linux 2 AMI (update as needed)
-  instance_type = "t2.micro"              # Free tier eligible instance type
+# Create a key pair resource
+resource "aws_key_pair" "example_keypair" {
+  key_name   = "example-keypair"
+  public_key = file("~/.ssh/id_rsa.pub") # Replace with the path to your public key file
+}
 
-  tags = {
-    Name        = "Terraform-created-EC2-instance"
-    Environment = "Learning"
-    Project     = "Terraform-AMI-Creation"
+# Create a security group
+resource "aws_security_group" "example_sg" {
+  name_prefix = "terraform-example-"
+
+  # Allow HTTP traffic
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow SSH traffic
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Allow all outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-# Create AMI from EC2 Instance
-resource "aws_ami" "my_ec2_spec_ami" {
-  name               = "my-ec2-ami"
-  description        = "My AMI created from my EC2 instance with Terraform script"
-  source_instance_id = aws_instance.my_ec2_spec.id
+# Create EC2 instance
+resource "aws_instance" "example_instance" {
+  ami             = "ami-0c55b159cbfafe1d0" # Specify your desired AMI ID
+  instance_type   = "t2.micro"
+  key_name        = aws_key_pair.example_keypair.key_name
+  security_groups = [aws_security_group.example_sg.name]
+
+  # User data script to install and configure Apache
+  user_data = <<-EOF
+    #!/bin/bash
+    yum update -y
+    yum install -y httpd
+    systemctl start httpd
+    systemctl enable httpd
+    echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
+  EOF
 
   tags = {
-    Name        = "Terraform-created-AMI"
-    Environment = "Learning"
-    Project     = "Terraform-AMI-Creation"
+    Name = "Terraform-Example-Instance"
   }
 }
-

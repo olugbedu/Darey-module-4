@@ -1,309 +1,277 @@
-# Terraform EC2 Instance and AMI Creation
+# Terraform EC2 Instance with Key Pair and User Data
 
-This project demonstrates how to use Terraform to automate the creation of an EC2 instance on AWS and subsequently create an Amazon Machine Image (AMI) from that instance.
-
-## Table of Contents
-- [Project Overview](#project-overview)
-- [Prerequisites](#prerequisites)
-- [Project Structure](#project-structure)
-- [Step-by-Step Implementation](#step-by-step-implementation)
-- [Script Explanation](#script-explanation)
-- [Cleanup](#cleanup)
-- [Troubleshooting](#troubleshooting)
+A comprehensive guide to deploying an EC2 instance on AWS using Terraform, including automated key pair generation and Apache HTTP server installation via user data scripts.
 
 ## Project Overview
 
-### Objectives
-- Learn how to write basic Terraform configuration files
-- Automate EC2 instance creation on AWS using Terraform
-- Create an AMI from an existing EC2 instance using Infrastructure as Code
+This project demonstrates Infrastructure as Code (IaC) principles using Terraform to:
+- Launch an EC2 instance on AWS
+- Generate and manage SSH key pairs
+- Execute user data scripts for server configuration
+- Set up Apache HTTP server with a custom welcome page
 
-### What You'll Build
-- An EC2 instance with specified configuration
-- An AMI created from the EC2 instance
-- Complete infrastructure automation using Terraform
+## Learning Objectives
+
+By completing this project, you will learn to:
+
+1. **Terraform Configuration**: Write Terraform code to launch EC2 instances with specified configurations
+2. **Key Pair Generation**: Generate SSH key pairs and make them available for secure instance access
+3. **User Data Execution**: Execute initialization scripts on EC2 instances during launch
 
 ## Prerequisites
 
 Before starting this project, ensure you have:
 
-### 1. AWS Account
-- Active AWS account with appropriate permissions
-- Access to EC2 and AMI services
-
-### 2. AWS CLI
-- AWS CLI installed and configured
-- Valid AWS credentials configured locally
-
-### 3. Terraform
-- Terraform installed on your local machine
-- Basic understanding of HCL (HashiCorp Configuration Language)
+- AWS CLI installed and configured with appropriate credentials
+- Terraform installed (version 0.12 or later)
+- Basic understanding of AWS EC2 and Terraform concepts
+- SSH key pair generated in your `~/.ssh/` directory
 
 ## Project Structure
 
 ```
-terraform-ec2-ami/
-├── main.tf              # Main Terraform configuration
-├── README.md           # Project documentation
-└── terraform.tfstate   # Terraform state file (auto-generated)
+terraform-ec2-keypair/
+├── main.tf
+├── README.md
+└── outputs/ (generated after apply)
 ```
 
-## Step-by-Step Implementation
+## Getting Started
 
-### Task 1: Confirm Prerequisites
+### Task 1: Terraform Configuration for EC2 Instance
 
-#### 1.1 Verify AWS Account Access
+#### Step 1: Create Project Directory
 ```bash
-# Login to AWS Console to confirm account is functional
-# Navigate to https://aws.amazon.com/console/
+mkdir terraform-ec2-keypair
+cd terraform-ec2-keypair
 ```
 
-#### 1.2 Check AWS CLI Installation
+#### Step 2: Create Terraform Configuration File
 ```bash
-# Verify AWS CLI is installed
-aws --version
-
-# Expected output: aws-cli/2.x.x Python/3.x.x...
-```
-
-#### 1.3 Confirm AWS CLI Configuration
-```bash
-# Check AWS CLI configuration
-aws configure list
-
-# Expected output showing configured credentials
-```
-
-#### 1.4 Test AWS Authentication
-```bash
-# Verify AWS CLI can authenticate
-aws sts get-caller-identity
-
-# Expected output: Account ID, User ARN, and User ID
-```
-
-#### 1.5 Verify Terraform Installation
-```bash
-# Check Terraform version
-terraform --version
-
-# Expected output: Terraform v1.x.x
-```
-
-### Task 2: Develop the Terraform Script
-
-#### 2.1 Create Project Directory
-```bash
-# Create and navigate to project directory
-mkdir terraform-ec2-ami
-cd terraform-ec2-ami
-```
-
-#### 2.2 Create Main Configuration File
-```bash
-# Create the main Terraform file
 nano main.tf
 ```
 
-#### 2.3 Write Terraform Configuration
-Add the following configuration to `main.tf`:
+#### Step 3: Add Terraform Configuration
+Copy and paste the following configuration into your `main.tf` file:
 
 ```hcl
-# Configure AWS Provider
+# Configure the AWS Provider
 provider "aws" {
-  region = "us-east-1"  # Change to your preferred AWS region
+  region = "us-east-1"  # Change this to your desired AWS region
 }
 
-# Create EC2 Instance
-resource "aws_instance" "my_ec2_spec" {
-  ami           = "ami-0c55b159cbfafe1d0"  # Amazon Linux 2 AMI (update as needed)
-  instance_type = "t2.micro"              # Free tier eligible instance type
+# Create a key pair resource
+resource "aws_key_pair" "example_keypair" {
+  key_name   = "example-keypair"
+  public_key = file("~/.ssh/id_rsa.pub")  # Replace with the path to your public key file
+}
+
+# Create a security group
+resource "aws_security_group" "example_sg" {
+  name_prefix = "terraform-example-"
   
-  tags = {
-    Name        = "Terraform-created-EC2-instance"
-    Environment = "Learning"
-    Project     = "Terraform-AMI-Creation"
+  # Allow HTTP traffic
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  # Allow SSH traffic
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+  # Allow all outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-# Create AMI from EC2 Instance
-resource "aws_ami" "my_ec2_spec_ami" {
-  name               = "my-ec2-ami"
-  description        = "My AMI created from my EC2 instance with Terraform script"
-  source_instance_id = aws_instance.my_ec2_spec.id
-  
+# Create EC2 instance
+resource "aws_instance" "example_instance" {
+  ami             = "ami-0c55b159cbfafe1d0"  # Specify your desired AMI ID
+  instance_type   = "t2.micro"
+  key_name        = aws_key_pair.example_keypair.key_name
+  security_groups = [aws_security_group.example_sg.name]
+
+  # User data script to install and configure Apache
+  user_data = <<-EOF
+    #!/bin/bash
+    yum update -y
+    yum install -y httpd
+    systemctl start httpd
+    systemctl enable httpd
+    echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
+  EOF
+
   tags = {
-    Name        = "Terraform-created-AMI"
-    Environment = "Learning"
-    Project     = "Terraform-AMI-Creation"
+    Name = "Terraform-Example-Instance"
   }
+}
+
+# Output the public IP address
+output "public_ip" {
+  description = "Public IP address of the EC2 instance"
+  value       = aws_instance.example_instance.public_ip
+}
+
+# Output the public DNS name
+output "public_dns" {
+  description = "Public DNS name of the EC2 instance"
+  value       = aws_instance.example_instance.public_dns
 }
 ```
 
-### Task 3: Execute the Terraform Script
-
-#### 3.1 Initialize Terraform
+#### Step 4: Initialize Terraform
 ```bash
-# Initialize the Terraform working directory
 terraform init
 ```
-**Expected Result:** Downloads AWS provider and initializes backend
 
-#### 3.2 Validate Configuration
+#### Step 5: Plan the Deployment
 ```bash
-# Validate the Terraform configuration syntax
-terraform validate
-```
-**Expected Result:** "Success! The configuration is valid."
-
-#### 3.3 Plan the Deployment
-```bash
-# Create an execution plan
 terraform plan
 ```
-**Expected Result:** Shows resources to be created (1 EC2 instance, 1 AMI)
 
-#### 3.4 Apply the Configuration
+#### Step 6: Apply the Configuration
 ```bash
-# Apply the Terraform configuration
 terraform apply
 ```
-**Actions Required:**
-- Review the planned changes
-- Type `yes` when prompted to confirm
-- Wait for resources to be created
 
-### Task 4: Confirm Resources
+When prompted, type `yes` to confirm the creation of resources.
 
-#### 4.1 Verify in AWS Console
-1. **EC2 Instance:**
-   - Navigate to AWS Console → EC2 → Instances
-   - Confirm instance named "Terraform-created-EC2-instance" exists
-   - Check instance state, type, and tags
+### Task 2: User Data Script Execution
 
-2. **AMI:**
-   - Navigate to AWS Console → EC2 → Images → AMIs
-   - Confirm AMI named "my-ec2-ami" exists
-   - Verify AMI is available and properly tagged
+The user data script in the configuration above will:
 
-#### 4.2 Verify via AWS CLI
+1. **Update the system**: `yum update -y`
+2. **Install Apache HTTP server**: `yum install -y httpd`
+3. **Start Apache service**: `systemctl start httpd`
+4. **Enable Apache to start on boot**: `systemctl enable httpd`
+5. **Create a custom welcome page**: Echo HTML content to `/var/www/html/index.html`
+
+The script executes automatically when the EC2 instance launches.
+
+### Task 3: Accessing the Web Server
+
+#### Step 1: Get the Public IP Address
+After successful deployment, Terraform will output the public IP address:
+
 ```bash
-# List EC2 instances
-aws ec2 describe-instances --filters "Name=tag:Name,Values=Terraform-created-EC2-instance"
-
-# List AMIs
-aws ec2 describe-images --owners self --filters "Name=name,Values=my-ec2-ami"
+# The output will show something like:
+public_ip = "54.123.456.789"
+public_dns = "ec2-54-123-456-789.compute-1.amazonaws.com"
 ```
 
-#### 4.3 Check Terraform State
+#### Step 2: Access the Web Server
+Open your web browser and navigate to:
+```
+http://[PUBLIC_IP_ADDRESS]
+```
+
+#### Step 3: Verify the Installation
+You should see a page displaying:
+```
+Hello World from [instance-hostname]
+```
+
+## Verification Steps
+
+### Check Instance Status
 ```bash
-# Show current Terraform state
+# View current Terraform state
 terraform show
 
-# List managed resources
-terraform state list
+# Check specific resource
+terraform state show aws_instance.example_instance
 ```
 
-## Script Explanation
-
-### Provider Configuration
-```hcl
-provider "aws" {
-  region = "us-east-1"
-}
+### SSH into the Instance (Optional)
+```bash
+ssh -i ~/.ssh/id_rsa ec2-user@[PUBLIC_IP_ADDRESS]
 ```
-- Specifies AWS as the cloud provider
-- Sets the deployment region (change as needed)
 
-### EC2 Instance Resource
-```hcl
-resource "aws_instance" "my_ec2_spec" {
-  ami           = "ami-0c55b159cbfafe1d0"
-  instance_type = "t2.micro"
-  tags = { ... }
-}
+### Verify Apache Service
+```bash
+# Once connected via SSH
+sudo systemctl status httpd
+curl http://localhost
 ```
-- **ami**: Amazon Machine Image ID (update for your region)
-- **instance_type**: EC2 instance size (t2.micro for free tier)
-- **tags**: Metadata for resource identification and management
-
-### AMI Resource
-```hcl
-resource "aws_ami" "my_ec2_spec_ami" {
-  name               = "my-ec2-ami"
-  description        = "..."
-  source_instance_id = aws_instance.my_ec2_spec.id
-}
-```
-- **name**: Unique name for the AMI
-- **source_instance_id**: References the EC2 instance created above
-- Creates dependency ensuring EC2 instance exists before AMI creation
 
 ## Cleanup
 
-### Task 5: Destroy Resources
+To avoid ongoing AWS charges, destroy the resources when you're done:
+
 ```bash
-# Destroy all resources created by Terraform
 terraform destroy
 ```
 
-**Actions Required:**
-- Review resources to be destroyed
-- Type `yes` when prompted to confirm
-- Wait for all resources to be deleted
+Type `yes` when prompted to confirm the destruction of resources.
 
-**Verification:**
-- Check AWS Console to confirm resources are removed
-- Verify no unexpected charges on AWS billing
+## Important Notes
+
+### AMI Selection
+- The AMI ID `ami-0c55b159cbfafe1d0` is an example and may not be available in all regions
+- Use the AWS Console or CLI to find appropriate AMI IDs for your region:
+```bash
+aws ec2 describe-images --owners amazon --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" --query 'Images[*].[ImageId,Name]' --output table
+```
+
+### Security Considerations
+- The security group allows SSH and HTTP access from anywhere (`0.0.0.0/0`)
+- In production, restrict access to specific IP ranges
+- Consider using AWS Systems Manager Session Manager instead of direct SSH
+
+### Cost Management
+- t2.micro instances are eligible for AWS Free Tier
+- Remember to destroy resources after testing to avoid charges
 
 ## Troubleshooting
 
-### Common Issues and Solutions
+### Common Issues
 
-#### 1. AWS Credentials Not Found
-```bash
-# Error: No valid credential sources found
-# Solution: Configure AWS CLI
-aws configure
-```
+1. **Authentication Errors**
+   ```bash
+   # Configure AWS credentials
+   aws configure
+   ```
 
-#### 2. AMI ID Not Found
-```bash
-# Error: InvalidAMIID.NotFound
-# Solution: Update AMI ID for your region
-aws ec2 describe-images --owners amazon --filters "Name=name,Values=amzn2-ami-hvm-*" --query 'Images[0].ImageId'
-```
+2. **AMI Not Found**
+   - Update the AMI ID for your specific region
+   - Ensure the AMI is available in your selected region
 
-#### 3. Insufficient Permissions
-```bash
-# Error: UnauthorizedOperation
-# Solution: Ensure IAM user has required permissions:
-# - EC2FullAccess or specific EC2 permissions
-# - IAM permissions for role assumption if using roles
-```
+3. **Key Pair Issues**
+   - Verify your public key path is correct
+   - Ensure the key pair doesn't already exist in AWS
 
-#### 4. Resource Already Exists
-```bash
-# Error: Resource already exists
-# Solution: Import existing resource or use different names
-terraform import aws_instance.my_ec2_spec i-1234567890abcdef0
-```
+4. **Security Group Conflicts**
+   - Use unique security group names
+   - Check for existing security groups with similar names
 
 ## Additional Resources
 
 - [Terraform AWS Provider Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [AWS EC2 User Guide](https://docs.aws.amazon.com/ec2/)
-- [Terraform Best Practices](https://www.terraform.io/docs/cloud/guides/recommended-practices/index.html)
+- [Terraform Configuration Language](https://www.terraform.io/docs/configuration/index.html)
 
-## Learning Outcomes
+## Project Completion Checklist
 
-After completing this project, you will have:
-- ✅ Created infrastructure using Terraform
-- ✅ Automated EC2 instance provisioning
-- ✅ Generated AMIs from existing instances
-- ✅ Managed infrastructure lifecycle with IaC
-- ✅ Applied Terraform best practices
+- [ ] Created project directory and main.tf file
+- [ ] Successfully ran `terraform init`
+- [ ] Applied configuration with `terraform apply`
+- [ ] Verified EC2 instance creation in AWS Console
+- [ ] Accessed web server via public IP
+- [ ] Confirmed "Hello World" message displays
+- [ ] Documented any challenges or observations
+- [ ] Cleaned up resources with `terraform destroy`
 
 ---
 
-**Note:** Remember to always run `terraform destroy` after completing the lab to avoid unnecessary AWS charges.
+**Learning Exercise**: This project serves as a hands-on introduction to Terraform and AWS infrastructure automation. Use it to build confidence with Infrastructure as Code practices.
