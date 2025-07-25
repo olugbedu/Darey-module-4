@@ -1,277 +1,517 @@
-# Terraform EC2 Instance with Key Pair and User Data
-
-A comprehensive guide to deploying an EC2 instance on AWS using Terraform, including automated key pair generation and Apache HTTP server installation via user data scripts.
+# Terraform Modules: VPC and S3 Bucket with Backend Storage
 
 ## Project Overview
 
-This project demonstrates Infrastructure as Code (IaC) principles using Terraform to:
-- Launch an EC2 instance on AWS
-- Generate and manage SSH key pairs
-- Execute user data scripts for server configuration
-- Set up Apache HTTP server with a custom welcome page
+This project demonstrates how to create modularized Terraform configurations for building AWS infrastructure, specifically an Amazon Virtual Private Cloud (VPC) and an Amazon S3 bucket. The project also configures Terraform to use Amazon S3 as the backend storage for storing the Terraform state file.
 
 ## Learning Objectives
 
-By completing this project, you will learn to:
-
-1. **Terraform Configuration**: Write Terraform code to launch EC2 instances with specified configurations
-2. **Key Pair Generation**: Generate SSH key pairs and make them available for secure instance access
-3. **User Data Execution**: Execute initialization scripts on EC2 instances during launch
+- Create and use Terraform modules for modular infrastructure provisioning
+- Build a reusable Terraform module for VPC creation with customizable configurations
+- Develop a Terraform module for S3 bucket creation with customizable settings
+- Configure Terraform to use Amazon S3 as backend storage for state management
 
 ## Prerequisites
 
 Before starting this project, ensure you have:
 
 - AWS CLI installed and configured with appropriate credentials
-- Terraform installed (version 0.12 or later)
-- Basic understanding of AWS EC2 and Terraform concepts
-- SSH key pair generated in your `~/.ssh/` directory
+- Terraform installed on your local machine
+- Basic understanding of AWS services (VPC, S3)
+- Text editor or IDE for writing Terraform configurations
 
 ## Project Structure
 
 ```
-terraform-ec2-keypair/
+terraform-modules-vpc-s3/
 ├── main.tf
-├── README.md
-└── outputs/ (generated after apply)
+├── backend.tf
+├── variables.tf (optional)
+├── outputs.tf (optional)
+└── modules/
+    ├── vpc/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   └── outputs.tf
+    └── s3/
+        ├── main.tf
+        ├── variables.tf
+        └── outputs.tf
 ```
 
-## Getting Started
+## Implementation Steps
 
-### Task 1: Terraform Configuration for EC2 Instance
+### Step 1: Project Setup
 
-#### Step 1: Create Project Directory
-```bash
-mkdir terraform-ec2-keypair
-cd terraform-ec2-keypair
-```
+1. **Create the main project directory:**
+   ```bash
+   mkdir terraform-modules-vpc-s3
+   cd terraform-modules-vpc-s3
+   ```
 
-#### Step 2: Create Terraform Configuration File
-```bash
-nano main.tf
-```
+2. **Create module directories:**
+   ```bash
+   mkdir -p modules/vpc
+   mkdir -p modules/s3
+   ```
 
-#### Step 3: Add Terraform Configuration
-Copy and paste the following configuration into your `main.tf` file:
+### Step 2: VPC Module Creation
 
-```hcl
-# Configure the AWS Provider
-provider "aws" {
-  region = "us-east-1"  # Change this to your desired AWS region
-}
+1. **Create the VPC module configuration:**
+   ```bash
+   nano modules/vpc/main.tf
+   ```
 
-# Create a key pair resource
-resource "aws_key_pair" "example_keypair" {
-  key_name   = "example-keypair"
-  public_key = file("~/.ssh/id_rsa.pub")  # Replace with the path to your public key file
-}
+2. **VPC Module Content (`modules/vpc/main.tf`):**
+   ```hcl
+   # VPC Resource
+   resource "aws_vpc" "main" {
+     cidr_block           = var.vpc_cidr
+     enable_dns_hostnames = var.enable_dns_hostnames
+     enable_dns_support   = var.enable_dns_support
+     
+     tags = {
+       Name = var.vpc_name
+     }
+   }
 
-# Create a security group
-resource "aws_security_group" "example_sg" {
-  name_prefix = "terraform-example-"
-  
-  # Allow HTTP traffic
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  # Allow SSH traffic
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  
-  # Allow all outbound traffic
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
+   # Internet Gateway
+   resource "aws_internet_gateway" "main" {
+     vpc_id = aws_vpc.main.id
+     
+     tags = {
+       Name = "${var.vpc_name}-igw"
+     }
+   }
 
-# Create EC2 instance
-resource "aws_instance" "example_instance" {
-  ami             = "ami-0c55b159cbfafe1d0"  # Specify your desired AMI ID
-  instance_type   = "t2.micro"
-  key_name        = aws_key_pair.example_keypair.key_name
-  security_groups = [aws_security_group.example_sg.name]
+   # Public Subnet
+   resource "aws_subnet" "public" {
+     count                   = length(var.public_subnet_cidrs)
+     vpc_id                  = aws_vpc.main.id
+     cidr_block              = var.public_subnet_cidrs[count.index]
+     availability_zone       = var.availability_zones[count.index]
+     map_public_ip_on_launch = true
+     
+     tags = {
+       Name = "${var.vpc_name}-public-subnet-${count.index + 1}"
+     }
+   }
 
-  # User data script to install and configure Apache
-  user_data = <<-EOF
-    #!/bin/bash
-    yum update -y
-    yum install -y httpd
-    systemctl start httpd
-    systemctl enable httpd
-    echo "<h1>Hello World from $(hostname -f)</h1>" > /var/www/html/index.html
-  EOF
+   # Route Table for Public Subnets
+   resource "aws_route_table" "public" {
+     vpc_id = aws_vpc.main.id
+     
+     route {
+       cidr_block = "0.0.0.0/0"
+       gateway_id = aws_internet_gateway.main.id
+     }
+     
+     tags = {
+       Name = "${var.vpc_name}-public-rt"
+     }
+   }
 
-  tags = {
-    Name = "Terraform-Example-Instance"
-  }
-}
+   # Route Table Association
+   resource "aws_route_table_association" "public" {
+     count          = length(aws_subnet.public)
+     subnet_id      = aws_subnet.public[count.index].id
+     route_table_id = aws_route_table.public.id
+   }
+   ```
 
-# Output the public IP address
-output "public_ip" {
-  description = "Public IP address of the EC2 instance"
-  value       = aws_instance.example_instance.public_ip
-}
+3. **Create VPC module variables (`modules/vpc/variables.tf`):**
+   ```hcl
+   variable "vpc_name" {
+     description = "Name of the VPC"
+     type        = string
+     default     = "main-vpc"
+   }
 
-# Output the public DNS name
-output "public_dns" {
-  description = "Public DNS name of the EC2 instance"
-  value       = aws_instance.example_instance.public_dns
-}
-```
+   variable "vpc_cidr" {
+     description = "CIDR block for VPC"
+     type        = string
+     default     = "10.0.0.0/16"
+   }
 
-#### Step 4: Initialize Terraform
+   variable "public_subnet_cidrs" {
+     description = "CIDR blocks for public subnets"
+     type        = list(string)
+     default     = ["10.0.1.0/24", "10.0.2.0/24"]
+   }
+
+   variable "availability_zones" {
+     description = "Availability zones"
+     type        = list(string)
+     default     = ["us-east-1a", "us-east-1b"]
+   }
+
+   variable "enable_dns_hostnames" {
+     description = "Enable DNS hostnames in VPC"
+     type        = bool
+     default     = true
+   }
+
+   variable "enable_dns_support" {
+     description = "Enable DNS support in VPC"
+     type        = bool
+     default     = true
+   }
+   ```
+
+4. **Create VPC module outputs (`modules/vpc/outputs.tf`):**
+   ```hcl
+   output "vpc_id" {
+     description = "ID of the VPC"
+     value       = aws_vpc.main.id
+   }
+
+   output "vpc_cidr_block" {
+     description = "CIDR block of the VPC"
+     value       = aws_vpc.main.cidr_block
+   }
+
+   output "public_subnet_ids" {
+     description = "IDs of the public subnets"
+     value       = aws_subnet.public[*].id
+   }
+
+   output "internet_gateway_id" {
+     description = "ID of the Internet Gateway"
+     value       = aws_internet_gateway.main.id
+   }
+   ```
+
+### Step 3: S3 Bucket Module Creation
+
+1. **Create the S3 module configuration:**
+   ```bash
+   nano modules/s3/main.tf
+   ```
+
+2. **S3 Module Content (`modules/s3/main.tf`):**
+   ```hcl
+   # S3 Bucket
+   resource "aws_s3_bucket" "main" {
+     bucket = var.bucket_name
+     
+     tags = var.tags
+   }
+
+   # S3 Bucket Versioning
+   resource "aws_s3_bucket_versioning" "main" {
+     bucket = aws_s3_bucket.main.id
+     versioning_configuration {
+       status = var.versioning_enabled ? "Enabled" : "Disabled"
+     }
+   }
+
+   # S3 Bucket Server Side Encryption
+   resource "aws_s3_bucket_server_side_encryption_configuration" "main" {
+     bucket = aws_s3_bucket.main.id
+
+     rule {
+       apply_server_side_encryption_by_default {
+         sse_algorithm = "AES256"
+       }
+     }
+   }
+
+   # S3 Bucket Public Access Block
+   resource "aws_s3_bucket_public_access_block" "main" {
+     bucket = aws_s3_bucket.main.id
+
+     block_public_acls       = var.block_public_access
+     block_public_policy     = var.block_public_access
+     ignore_public_acls      = var.block_public_access
+     restrict_public_buckets = var.block_public_access
+   }
+   ```
+
+3. **Create S3 module variables (`modules/s3/variables.tf`):**
+   ```hcl
+   variable "bucket_name" {
+     description = "Name of the S3 bucket"
+     type        = string
+   }
+
+   variable "versioning_enabled" {
+     description = "Enable versioning for S3 bucket"
+     type        = bool
+     default     = true
+   }
+
+   variable "block_public_access" {
+     description = "Block all public access to S3 bucket"
+     type        = bool
+     default     = true
+   }
+
+   variable "tags" {
+     description = "Tags to apply to the S3 bucket"
+     type        = map(string)
+     default     = {}
+   }
+   ```
+
+4. **Create S3 module outputs (`modules/s3/outputs.tf`):**
+   ```hcl
+   output "bucket_id" {
+     description = "ID of the S3 bucket"
+     value       = aws_s3_bucket.main.id
+   }
+
+   output "bucket_arn" {
+     description = "ARN of the S3 bucket"
+     value       = aws_s3_bucket.main.arn
+   }
+
+   output "bucket_domain_name" {
+     description = "Domain name of the S3 bucket"
+     value       = aws_s3_bucket.main.bucket_domain_name
+   }
+   ```
+
+### Step 4: Main Configuration
+
+1. **Create the main Terraform configuration:**
+   ```bash
+   nano main.tf
+   ```
+
+2. **Main Configuration Content (`main.tf`):**
+   ```hcl
+   # Configure AWS Provider
+   provider "aws" {
+     region = var.aws_region
+   }
+
+   # VPC Module
+   module "vpc" {
+     source = "./modules/vpc"
+     
+     vpc_name             = var.vpc_name
+     vpc_cidr             = var.vpc_cidr
+     public_subnet_cidrs  = var.public_subnet_cidrs
+     availability_zones   = var.availability_zones
+   }
+
+   # S3 Bucket Module
+   module "s3_bucket" {
+     source = "./modules/s3"
+     
+     bucket_name         = var.bucket_name
+     versioning_enabled  = var.versioning_enabled
+     block_public_access = var.block_public_access
+     
+     tags = {
+       Name        = var.bucket_name
+       Environment = var.environment
+       Project     = "terraform-modules-demo"
+     }
+   }
+   ```
+
+### Step 5: Backend Storage Configuration
+
+1. **Create the backend configuration:**
+   ```bash
+   nano backend.tf
+   ```
+
+2. **Backend Configuration Content (`backend.tf`):**
+   ```hcl
+   terraform {
+     backend "s3" {
+       bucket         = "your-terraform-state-bucket"  # Replace with your bucket name
+       key            = "terraform.tfstate"
+       region         = "us-east-1"                    # Change to your desired region
+       encrypt        = true
+       dynamodb_table = "your-lock-table"              # Replace with your DynamoDB table
+     }
+   }
+   ```
+
+### Step 6: Variables and Outputs
+
+1. **Create main variables file (`variables.tf`):**
+   ```hcl
+   variable "aws_region" {
+     description = "AWS region"
+     type        = string
+     default     = "us-east-1"
+   }
+
+   variable "vpc_name" {
+     description = "Name of the VPC"
+     type        = string
+     default     = "demo-vpc"
+   }
+
+   variable "vpc_cidr" {
+     description = "CIDR block for VPC"
+     type        = string
+     default     = "10.0.0.0/16"
+   }
+
+   variable "public_subnet_cidrs" {
+     description = "CIDR blocks for public subnets"
+     type        = list(string)
+     default     = ["10.0.1.0/24", "10.0.2.0/24"]
+   }
+
+   variable "availability_zones" {
+     description = "Availability zones"
+     type        = list(string)
+     default     = ["us-east-1a", "us-east-1b"]
+   }
+
+   variable "bucket_name" {
+     description = "Name of the S3 bucket"
+     type        = string
+     default     = "my-terraform-demo-bucket-12345"  # Must be globally unique
+   }
+
+   variable "versioning_enabled" {
+     description = "Enable versioning for S3 bucket"
+     type        = bool
+     default     = true
+   }
+
+   variable "block_public_access" {
+     description = "Block all public access to S3 bucket"
+     type        = bool
+     default     = true
+   }
+
+   variable "environment" {
+     description = "Environment name"
+     type        = string
+     default     = "development"
+   }
+   ```
+
+2. **Create main outputs file (`outputs.tf`):**
+   ```hcl
+   output "vpc_id" {
+     description = "ID of the VPC"
+     value       = module.vpc.vpc_id
+   }
+
+   output "public_subnet_ids" {
+     description = "IDs of the public subnets"
+     value       = module.vpc.public_subnet_ids
+   }
+
+   output "s3_bucket_id" {
+     description = "ID of the S3 bucket"
+     value       = module.s3_bucket.bucket_id
+   }
+
+   output "s3_bucket_arn" {
+     description = "ARN of the S3 bucket"
+     value       = module.s3_bucket.bucket_arn
+   }
+   ```
+
+## Deployment Steps
+
+### 1. Initialize Terraform
 ```bash
 terraform init
 ```
 
-#### Step 5: Plan the Deployment
+### 2. Validate Configuration
+```bash
+terraform validate
+```
+
+### 3. Plan the Deployment
 ```bash
 terraform plan
 ```
 
-#### Step 6: Apply the Configuration
+### 4. Apply the Configuration
 ```bash
 terraform apply
 ```
 
-When prompted, type `yes` to confirm the creation of resources.
+### 5. Confirm Resource Creation
+Review the output and type `yes` when prompted to confirm the creation of resources.
 
-### Task 2: User Data Script Execution
+## Verification
 
-The user data script in the configuration above will:
+After successful deployment, verify the created resources:
 
-1. **Update the system**: `yum update -y`
-2. **Install Apache HTTP server**: `yum install -y httpd`
-3. **Start Apache service**: `systemctl start httpd`
-4. **Enable Apache to start on boot**: `systemctl enable httpd`
-5. **Create a custom welcome page**: Echo HTML content to `/var/www/html/index.html`
+1. **Check VPC in AWS Console:**
+   - Navigate to VPC service
+   - Verify the VPC, subnets, and internet gateway are created
 
-The script executes automatically when the EC2 instance launches.
+2. **Check S3 Bucket in AWS Console:**
+   - Navigate to S3 service
+   - Verify the bucket is created with proper configuration
 
-### Task 3: Accessing the Web Server
-
-#### Step 1: Get the Public IP Address
-After successful deployment, Terraform will output the public IP address:
-
-```bash
-# The output will show something like:
-public_ip = "54.123.456.789"
-public_dns = "ec2-54-123-456-789.compute-1.amazonaws.com"
-```
-
-#### Step 2: Access the Web Server
-Open your web browser and navigate to:
-```
-http://[PUBLIC_IP_ADDRESS]
-```
-
-#### Step 3: Verify the Installation
-You should see a page displaying:
-```
-Hello World from [instance-hostname]
-```
-
-## Verification Steps
-
-### Check Instance Status
-```bash
-# View current Terraform state
-terraform show
-
-# Check specific resource
-terraform state show aws_instance.example_instance
-```
-
-### SSH into the Instance (Optional)
-```bash
-ssh -i ~/.ssh/id_rsa ec2-user@[PUBLIC_IP_ADDRESS]
-```
-
-### Verify Apache Service
-```bash
-# Once connected via SSH
-sudo systemctl status httpd
-curl http://localhost
-```
+3. **Check Terraform State:**
+   ```bash
+   terraform show
+   terraform state list
+   ```
 
 ## Cleanup
 
-To avoid ongoing AWS charges, destroy the resources when you're done:
+To destroy the infrastructure when no longer needed:
 
 ```bash
 terraform destroy
 ```
 
-Type `yes` when prompted to confirm the destruction of resources.
-
 ## Important Notes
 
-### AMI Selection
-- The AMI ID `ami-0c55b159cbfafe1d0` is an example and may not be available in all regions
-- Use the AWS Console or CLI to find appropriate AMI IDs for your region:
-```bash
-aws ec2 describe-images --owners amazon --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" --query 'Images[*].[ImageId,Name]' --output table
-```
-
-### Security Considerations
-- The security group allows SSH and HTTP access from anywhere (`0.0.0.0/0`)
-- In production, restrict access to specific IP ranges
-- Consider using AWS Systems Manager Session Manager instead of direct SSH
-
-### Cost Management
-- t2.micro instances are eligible for AWS Free Tier
-- Remember to destroy resources after testing to avoid charges
+- **Bucket Names**: S3 bucket names must be globally unique. Update the `bucket_name` variable accordingly.
+- **AWS Credentials**: Ensure your AWS CLI is configured with appropriate permissions.
+- **Backend Setup**: Before using S3 backend, create the state bucket and DynamoDB table manually.
+- **Region Configuration**: Update the AWS region in both provider and backend configurations as needed.
+- **Security**: Follow AWS security best practices for production deployments.
 
 ## Troubleshooting
 
-### Common Issues
+### Common Issues:
 
-1. **Authentication Errors**
-   ```bash
-   # Configure AWS credentials
-   aws configure
-   ```
+1. **Bucket Already Exists**: Choose a unique bucket name
+2. **Permission Denied**: Check AWS credentials and IAM permissions
+3. **Backend Initialization**: Ensure the backend S3 bucket exists before running `terraform init`
 
-2. **AMI Not Found**
-   - Update the AMI ID for your specific region
-   - Ensure the AMI is available in your selected region
+### Useful Commands:
 
-3. **Key Pair Issues**
-   - Verify your public key path is correct
-   - Ensure the key pair doesn't already exist in AWS
+```bash
+# Format Terraform files
+terraform fmt
 
-4. **Security Group Conflicts**
-   - Use unique security group names
-   - Check for existing security groups with similar names
+# Validate syntax
+terraform validate
 
-## Additional Resources
+# Show current state
+terraform show
 
-- [Terraform AWS Provider Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-- [AWS EC2 User Guide](https://docs.aws.amazon.com/ec2/)
-- [Terraform Configuration Language](https://www.terraform.io/docs/configuration/index.html)
+# List all resources
+terraform state list
 
-## Project Completion Checklist
+# Get specific output
+terraform output vpc_id
+```
 
-- [ ] Created project directory and main.tf file
-- [ ] Successfully ran `terraform init`
-- [ ] Applied configuration with `terraform apply`
-- [ ] Verified EC2 instance creation in AWS Console
-- [ ] Accessed web server via public IP
-- [ ] Confirmed "Hello World" message displays
-- [ ] Documented any challenges or observations
-- [ ] Cleaned up resources with `terraform destroy`
+## Learning Outcomes
 
----
+By completing this project, you have learned:
 
-**Learning Exercise**: This project serves as a hands-on introduction to Terraform and AWS infrastructure automation. Use it to build confidence with Infrastructure as Code practices.
+- ✅ How to structure Terraform projects with modules
+- ✅ Creating reusable infrastructure components
+- ✅ Managing Terraform state with remote backends
+- ✅ Best practices for variable and output management
+- ✅ Implementing AWS VPC and S3 bucket infrastructure as code
+
+## Next Steps
+
+- Explore additional AWS services and create more modules
+- Implement CI/CD pipelines for Terraform deployments
+- Study Terraform workspaces for environment management
+- Learn about Terraform Cloud for team collaboration
