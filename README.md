@@ -419,21 +419,25 @@ terraform-modules-vpc-s3/
 ```bash
 terraform init
 ```
+![](./tf-init.png)
 
 ### 2. Validate Configuration
 ```bash
 terraform validate
 ```
+![](./tf-valitade.png)
 
 ### 3. Plan the Deployment
 ```bash
 terraform plan
 ```
+![](./tf-plan.png)
 
 ### 4. Apply the Configuration
 ```bash
 terraform apply
 ```
+![](./tf-apply.png)
 
 ### 5. Confirm Resource Creation
 Review the output and type `yes` when prompted to confirm the creation of resources.
@@ -480,7 +484,7 @@ terraform destroy
 2. **Permission Denied**: Check AWS credentials and IAM permissions
 3. **Backend Initialization**: Ensure the backend S3 bucket exists before running `terraform init`
 
-### Useful Commands:
+### Commands:
 
 ```bash
 # Format Terraform files
