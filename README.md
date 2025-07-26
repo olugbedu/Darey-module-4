@@ -1,345 +1,317 @@
-# Automate User Creation on Linux Server using Ansible
+# Deploy and Configure Nginx Web Server using Ansible
 
-This project demonstrates how to automate user account creation on Linux servers using Ansible playbooks. The automation simplifies user management across multiple servers and eliminates the tedious manual process of creating user accounts.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Prerequisites](#prerequisites)
-- [Project Structure](#project-structure)
-- [Installation & Setup](#installation--setup)
-- [Implementation Steps](#implementation-steps)
-- [Usage](#usage)
-- [Verification](#verification)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
+![Ansible](https://img.shields.io/badge/ansible-%231A1918.svg?style=for-the-badge&logo=ansible&logoColor=white)
+![Nginx](https://img.shields.io/badge/nginx-%23009639.svg?style=for-the-badge&logo=nginx&logoColor=white)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
 
 ## Overview
 
-Managing user accounts manually across multiple Linux servers can be time-consuming and error-prone. This Ansible automation project provides:
-
-- **Automated user creation** with consistent configurations
-- **SSH key management** for secure access
-- **Group assignment** for proper permissions
-- **Home directory creation** with appropriate settings
-- **Scalable solution** for multiple servers
-
-### Key Features
-
-- ✅ Batch user creation across multiple servers
-- ✅ Automated SSH key deployment
-- ✅ Group membership management
-- ✅ Home directory configuration
-- ✅ Shell assignment
-- ✅ Verification and testing procedures
+This project demonstrates how to automate the deployment and configuration of Nginx web server using Ansible. Instead of manually configuring Nginx on multiple servers, this approach uses Infrastructure as Code (IaC) principles to ensure consistent, repeatable deployments.
 
 ## Prerequisites
 
 Before starting this project, ensure you have:
 
-### System Requirements
-- **Control Machine**: Linux system with Ansible installed
-- **Target Servers**: One or more Linux servers for user creation
-- **Network Access**: SSH connectivity between control and target machines
+- **Control Machine**: A Linux machine with Ansible installed
+- **Target Server(s)**: At least one Ubuntu/Linux server for Nginx deployment
+- **SSH Access**: Key-based authentication configured between control and target machines
+- **Network Access**: Target servers accessible from control machine
+- **Sudo Privileges**: Administrative access on target servers
+- **Text Editor**: For creating and editing Ansible playbooks
 
-### Software Requirements
-- **Ansible**: Latest version installed on control machine
-- **SSH**: OpenSSH client and server
-- **Text Editor**: For creating and editing playbooks
-
-### Access Requirements
-- **SSH Access**: Key-based authentication between machines
-- **Sudo Privileges**: On target servers for user management
-- **Public SSH Keys**: For users being created
-
-### Time Estimation
-- **Setup Time**: 30-45 minutes
-- **Implementation**: 45-60 minutes
-- **Testing**: 15-30 minutes
-- **Total**: 1.5-2 hours
+**Estimated Time**: 2-3 hours
 
 ## Project Structure
 
 ```
-ansible-user-automation/
+nginx-ansible-deployment/
 ├── README.md
 ├── inventory.ini
-├── create_users.yml
-├── ssh_keys/
-│   ├── user1.pub
-│   └── user2.pub
-└── group_vars/
-    └── all.yml
+├── install_nginx.yml
+├── configure_nginx.yml
+└── files/
+    └── index.html
 ```
 
-## Installation & Setup
+## Step-by-Step Implementation
 
-### Step 1: Install Ansible
+### Step 1: Install and Configure Ansible
 
-#### On Ubuntu/Debian:
+#### 1.1 Install Ansible on Control Machine
+
 ```bash
+# Update package repository
 sudo apt update
+
+# Install Ansible
 sudo apt install ansible -y
 ```
 
-#### On CentOS/RHEL:
-```bash
-sudo yum install epel-release -y
-sudo yum install ansible -y
-```
+#### 1.2 Verify Installation
 
-#### Verify Installation:
 ```bash
+# Check Ansible version
 ansible --version
 ```
 
-### Step 2: Configure SSH Key Authentication
+#### 1.3 Set Up SSH Key Authentication
 
-#### Generate SSH Key Pair:
 ```bash
-ssh-keygen -t rsa -b 4096 -C "ansible-automation"
+# Generate SSH key pair (if not already exists)
+ssh-keygen -t rsa -b 4096
+
+# Copy public key to target server
+ssh-copy-id user@<target-server-ip>
+
+# Test SSH connection
+ssh user@<target-server-ip>
 ```
 
-#### Copy Public Key to Target Servers:
+### Step 2: Create Ansible Inventory File
+
+#### 2.1 Create Inventory File
+
 ```bash
-ssh-copy-id user@target-server-ip
+nano inventory.ini
 ```
 
-#### Test SSH Connection:
-```bash
-ssh user@target-server-ip
-```
-
-## Implementation Steps
-
-### Step 1: Create Inventory File
-
-Create `inventory.ini` to define target servers:
+#### 2.2 Define Target Servers
 
 ```ini
-[linux_servers]
-target ansible_host=target-server-ip ansible_user=user
+[web_servers]
+target ansible_host=<target-server-ip> ansible_user=<username>
 
-# Example with multiple servers
-[linux_servers]
-server1 ansible_host=192.168.1.10 ansible_user=admin
-server2 ansible_host=192.168.1.11 ansible_user=admin
-server3 ansible_host=192.168.1.12 ansible_user=admin
+# Example:
+# target ansible_host=192.168.1.100 ansible_user=ubuntu
 ```
 
-### Step 2: Basic User Creation Playbook
+#### 2.3 Test Connectivity
 
-Create `create_users.yml` for basic user creation:
+```bash
+# Test connection to all hosts
+ansible -i inventory.ini all -m ping
+```
+
+### Step 3: Create Nginx Installation Playbook
+
+#### 3.1 Create Installation Playbook
+
+```bash
+nano install_nginx.yml
+```
+
+#### 3.2 Playbook Content
 
 ```yaml
 ---
-- name: Automate user creation
-  hosts: linux_servers
+- name: Install Nginx on the server
+  hosts: web_servers
   become: yes
   tasks:
-    - name: Create a new user
-      user:
-        name: "{{ item.username }}"
+    - name: Install Nginx
+      apt:
+        name: nginx
         state: present
-        shell: /bin/bash
-        create_home: yes
-      with_items:
-        - { username: "user1" }
-        - { username: "user2" }
+        update_cache: yes
+
+    - name: Ensure Nginx is running
+      service:
+        name: nginx
+        state: started
+        enabled: yes
 ```
 
-### Step 3: Advanced User Configuration
+#### 3.3 Run Installation Playbook
 
-Update the playbook with additional settings:
+```bash
+ansible-playbook -i inventory.ini install_nginx.yml
+```
+
+### Step 4: Configure Custom Nginx Website
+
+#### 4.1 Create Configuration Playbook
+
+```bash
+nano configure_nginx.yml
+```
+
+#### 4.2 Playbook Content
 
 ```yaml
 ---
-- name: Automate user creation
-  hosts: linux_servers
+- name: Configure Nginx website
+  hosts: web_servers
   become: yes
   tasks:
-    - name: Create a new user with additional settings
-      user:
-        name: "{{ item.username }}"
-        state: present
-        shell: /bin/bash
-        create_home: yes
-        groups: "{{ item.groups }}"
-      with_items:
-        - { username: "user1", groups: "sudo" }
-        - { username: "user2", groups: "docker" }
+    - name: Create website root directory
+      file:
+        path: /var/www/mywebsite
+        state: directory
+        mode: '0755'
 
-    - name: Add SSH key for the users
-      authorized_key:
-        user: "{{ item.username }}"
-        state: present
-        key: "{{ lookup('file', item.ssh_key) }}"
-      with_items:
-        - { username: "user1", ssh_key: "/path/to/user1.pub" }
-        - { username: "user2", ssh_key: "/path/to/user2.pub" }
+    - name: Deploy HTML content
+      copy:
+        content: |
+          <html>
+          <head><title>Welcome to My Website</title></head>
+          <body>
+          <h1>Hello from Nginx!</h1>
+          <p>This website was deployed using Ansible automation!</p>
+          </body>
+          </html>
+        dest: /var/www/mywebsite/index.html
+
+    - name: Configure Nginx server block
+      copy:
+        content: |
+          server {
+              listen 80;
+              server_name _;
+              root /var/www/mywebsite;
+              index index.html;
+              location / {
+                  try_files $uri $uri/ =404;
+              }
+          }
+        dest: /etc/nginx/sites-available/mywebsite
+
+    - name: Enable the Nginx server block
+      file:
+        src: /etc/nginx/sites-available/mywebsite
+        dest: /etc/nginx/sites-enabled/mywebsite
+        state: link
+
+    - name: Remove default Nginx server block
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
 ```
 
-### Step 4: Prepare SSH Keys
-
-1. **Create SSH keys directory**:
-   ```bash
-   mkdir ssh_keys
-   ```
-
-2. **Generate or copy user SSH keys**:
-   ```bash
-   # Generate new keys for users
-   ssh-keygen -t rsa -f ssh_keys/user1 -C "user1@company.com"
-   ssh-keygen -t rsa -f ssh_keys/user2 -C "user2@company.com"
-   ```
-
-3. **Update playbook paths**:
-   ```yaml
-   with_items:
-     - { username: "user1", ssh_key: "ssh_keys/user1.pub" }
-     - { username: "user2", ssh_key: "ssh_keys/user2.pub" }
-   ```
-
-## 🏃‍♂️ Usage
-
-### Execute the Playbook
-
-#### Dry Run (Check Mode):
-```bash
-ansible-playbook -i inventory.ini create_users.yml --check
-```
-
-#### Execute Playbook:
-```bash
-ansible-playbook -i inventory.ini create_users.yml
-```
-
-#### Execute with Verbose Output:
-```bash
-ansible-playbook -i inventory.ini create_users.yml -v
-```
-
-#### Execute on Specific Hosts:
-```bash
-ansible-playbook -i inventory.ini create_users.yml --limit server1
-```
-
-### Sample Output
-
-```
-PLAY [Automate user creation] **************************************************
-
-TASK [Gathering Facts] *********************************************************
-ok: [target]
-
-TASK [Create a new user with additional settings] *****************************
-changed: [target] => (item={'username': 'user1', 'groups': 'sudo'})
-changed: [target] => (item={'username': 'user2', 'groups': 'docker'})
-
-TASK [Add SSH key for the users] ***********************************************
-changed: [target] => (item={'username': 'user1', 'ssh_key': 'ssh_keys/user1.pub'})
-changed: [target] => (item={'username': 'user2', 'ssh_key': 'ssh_keys/user2.pub'})
-
-PLAY RECAP *********************************************************************
-target                     : ok=3    changed=2    unreachable=0    failed=0
-```
-
-## Verification
-
-### Step 1: Verify User Creation
-
-Check if users were created on target servers:
+#### 4.3 Run Configuration Playbook
 
 ```bash
-# Check /etc/passwd for new users
-cat /etc/passwd | grep -E "user1|user2"
-
-# List home directories
-ls -la /home/
-
-# Check user details
-id user1
-id user2
+ansible-playbook -i inventory.ini configure_nginx.yml
 ```
 
-### Step 2: Verify Group Membership
+### Step 5: Verify Deployment
+
+#### 5.1 Test Nginx Service
 
 ```bash
-# Check group membership
-groups user1
-groups user2
-
-# Verify sudo access (if applicable)
-sudo -l -U user1
+# Check if Nginx is running on target server
+ansible -i inventory.ini web_servers -m shell -a "systemctl status nginx"
 ```
 
-### Step 3: Test SSH Access
+#### 5.2 Test Website Access
 
 ```bash
-# Test SSH login with created users
-ssh -i ssh_keys/user1 user1@target-server-ip
-ssh -i ssh_keys/user2 user2@target-server-ip
+# Test HTTP response from command line
+curl http://<target-server-ip>
+
+# Expected output: HTML content with "Hello from Nginx!"
 ```
 
-### Step 4: Verify Home Directory
+#### 5.3 Browser Verification
+
+Open your web browser and navigate to:
+```
+http://<target-server-ip>
+```
+
+You should see the custom website with the message "Hello from Nginx!"
+
+## Complete Deployment Commands
+
+For a quick deployment, run these commands in sequence:
 
 ```bash
-# Check home directory contents
-ls -la /home/user1/
-ls -la /home/user2/
+# 1. Test connectivity
+ansible -i inventory.ini all -m ping
 
-# Verify SSH authorized_keys
-cat /home/user1/.ssh/authorized_keys
-cat /home/user2/.ssh/authorized_keys
+# 2. Install Nginx
+ansible-playbook -i inventory.ini install_nginx.yml
+
+# 3. Configure website
+ansible-playbook -i inventory.ini configure_nginx.yml
+
+# 4. Verify deployment
+curl http://<target-server-ip>
 ```
+
+## Key Features Implemented
+
+✅ **Automated Nginx Installation**: Using Ansible apt module  
+✅ **Service Management**: Ensuring Nginx starts and enables on boot  
+✅ **Custom Website Deployment**: Creating and deploying HTML content  
+✅ **Server Block Configuration**: Setting up custom Nginx server blocks  
+✅ **Default Site Removal**: Cleaning up default Nginx configuration  
+✅ **Service Reload**: Applying configuration changes without downtime  
 
 ## Troubleshooting
 
 ### Common Issues and Solutions
 
-#### 1. SSH Connection Failed
-```bash
-# Error: Permission denied (publickey)
-# Solution: Verify SSH key authentication
-ssh-copy-id user@target-server-ip
-```
+1. **SSH Connection Failed**
+   ```bash
+   # Ensure SSH key is added to target server
+   ssh-copy-id user@target-server-ip
+   ```
 
-#### 2. Ansible Host Unreachable
-```bash
-# Error: UNREACHABLE! => {"changed": false, "msg": "Failed to connect"}
-# Solution: Check inventory file and network connectivity
-ansible -i inventory.ini linux_servers -m ping
-```
+2. **Permission Denied**
+   ```bash
+   # Ensure user has sudo privileges
+   sudo usermod -aG sudo username
+   ```
 
-#### 3. Permission Denied for User Creation
-```bash
-# Error: Failed to create user
-# Solution: Ensure 'become: yes' is set and user has sudo privileges
-```
+3. **Nginx Failed to Start**
+   ```bash
+   # Check Nginx configuration syntax
+   ansible -i inventory.ini web_servers -m shell -a "nginx -t"
+   ```
 
-#### 4. SSH Key Not Found
-```bash
-# Error: Could not find or access 'ssh_keys/user1.pub'
-# Solution: Verify file path and permissions
-ls -la ssh_keys/
-chmod 644 ssh_keys/*.pub
-```
+4. **Website Not Accessible**
+   ```bash
+   # Check if port 80 is open
+   ansible -i inventory.ini web_servers -m shell -a "ufw status"
+   ```
 
-### Debug Commands
+## Benefits of This Approach
 
-```bash
-# Test inventory connectivity
-ansible -i inventory.ini linux_servers -m ping
+- **Consistency**: Same configuration across all servers
+- **Scalability**: Easy to deploy to multiple servers simultaneously
+- **Repeatability**: Playbooks can be run multiple times safely
+- **Version Control**: Configuration stored as code
+- **Documentation**: Self-documenting infrastructure
 
-# Check facts gathering
-ansible -i inventory.ini linux_servers -m setup
+## Next Steps
 
-# Test with increased verbosity
-ansible-playbook -i inventory.ini create_users.yml -vvv
-```
+After completing this basic setup, consider:
 
-view Ansible documentation at [docs.ansible.com](https://docs.ansible.com)
+- Adding SSL/TLS certificates using Let's Encrypt
+- Implementing load balancing across multiple servers
+- Adding monitoring and logging configuration
+- Creating roles for better playbook organization
+- Implementing CI/CD pipelines for automated deployments
 
----
+## Learning Outcomes
 
-**Note**: Always test playbooks in a development environment before applying to production servers. Ensure you have proper backups and recovery procedures in place.
+By completing this project, you have learned to:
+
+1. ✅ Install and configure Ansible for infrastructure automation
+2. ✅ Create and manage Ansible inventory files
+3. ✅ Write Ansible playbooks for software installation
+4. ✅ Configure web servers using Infrastructure as Code
+5. ✅ Verify and troubleshoot automated deployments
+
+## Contributing
+
+Feel free to fork this project and submit pull requests for improvements or additional features.
+
+## License
+
+This project is open source and available under the [MIT License](LICENSE).
