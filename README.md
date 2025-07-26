@@ -1,474 +1,298 @@
-# Terraform Capstone Project: Automated WordPress Deployment on AWS
+# Ansible Linux Server Setup
 
-## Project Overview
+A comprehensive guide to setting up and configuring Ansible on a Linux server for IT infrastructure automation.
 
-This project demonstrates the implementation of a scalable, secure, and cost-effective WordPress hosting solution on AWS using Terraform Infrastructure as Code (IaC). The solution is designed for DigitalBoost, a digital marketing agency requiring a high-performance WordPress website with automated deployment capabilities.
+## Table of Contents
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Installation Steps](#installation-steps)
+- [Configuration](#configuration)
+- [Testing and Verification](#testing-and-verification)
+- [Usage Examples](#usage-examples)
+- [Troubleshooting](#troubleshooting)
+- [Next Steps](#next-steps)
 
-## Architecture Overview
+## Overview
 
-The infrastructure spans across 2 Availability Zones for high availability and includes:
-- VPC with public and private subnets
-- Internet Gateway and NAT Gateway
-- Application Load Balancer
-- Auto Scaling Group with EC2 instances
-- Amazon RDS MySQL database
-- Amazon EFS for shared file storage
-- Route 53 for DNS management
-- Comprehensive security groups
+This project demonstrates how to set up Ansible on a Linux server to automate IT infrastructure management. Ansible is a powerful automation tool that simplifies server configuration, application deployment, and task automation across multiple machines.
+
+**Estimated completion time:** 1-2 hours
+
+### Learning Objectives
+By completing this setup, you will:
+- Understand what Ansible is and how it works
+- Install and configure Ansible on a Linux control node
+- Set up SSH key-based authentication for target nodes
+- Create an Ansible inventory file
+- Verify Ansible setup by running basic commands
 
 ## Prerequisites
 
-- AWS CLI configured with appropriate credentials
-- Terraform installed (version 0.12+)
-- Knowledge of TechOps Essentials
-- Completion of Core 2 Courses and Mini Projects
-- Basic understanding of AWS services and networking concepts
+Before starting, ensure you have:
 
-## Project Structure
+### Hardware Requirements
+- **Control Node:** A Linux server or virtual machine (Ubuntu/CentOS/RHEL)
+- **Target Machines:** At least one additional Linux server for Ansible to manage
 
-```
-terraform-wordpress/
-├── README.md
-├── main.tf
-├── variables.tf
-├── outputs.tf
-├── terraform.tfvars
-├── modules/
-│   ├── vpc/
-│   ├── security-groups/
-│   ├── rds/
-│   ├── efs/
-│   ├── alb/
-│   └── autoscaling/
-└── scripts/
-    └── user-data.sh
-```
+### Access Requirements
+- SSH access to all target machines
+- Sudo privileges on the control node
+- Basic knowledge of Linux command line
+- A text editor (nano, vim, or similar)
 
-## Implementation Steps
+### Network Requirements
+- Network connectivity between control node and target machines
+- Open SSH port (22) on target machines
 
-### Step 1: VPC Setup
+## Installation Steps
 
-**Objective:** Create a Virtual Private Cloud (VPC) to isolate and secure the WordPress infrastructure.
+### Step 1: Update Package Repository
 
-**Tasks Completed:**
-1. Define IP address range for the VPC (10.0.0.0/16)
-2. Create VPC with public and private subnets across 2 AZs
-3. Configure route tables for each subnet type
+First, update your system's package repository to ensure you have the latest package information:
 
-**Terraform Components:**
-```hcl
-# VPC Configuration
-resource "aws_vpc" "main" {
-  cidr_block           = var.vpc_cidr
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-  
-  tags = {
-    Name = "wordpress-vpc"
-  }
-}
-```
-
-**Key Features:**
-- Multi-AZ deployment for high availability
-- Separate public and private subnets
-- DNS resolution enabled
-
-### Step 2: Public and Private Subnets with NAT Gateway
-
-**Objective:** Implement secure network architecture with NAT Gateway for private subnet internet access.
-
-**Tasks Completed:**
-1. Created public subnets in 2 AZs for internet-facing resources
-2. Created private subnets in 2 AZs for application and database tiers
-3. Deployed NAT Gateway in public subnet for outbound internet access
-4. Configured route tables with appropriate associations
-
-**Terraform Components:**
-```hcl
-# Public Subnets
-resource "aws_subnet" "public" {
-  count                   = length(var.availability_zones)
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = var.public_subnet_cidrs[count.index]
-  availability_zone       = var.availability_zones[count.index]
-  map_public_ip_on_launch = true
-}
-
-# NAT Gateway
-resource "aws_nat_gateway" "main" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-}
-```
-
-**Network Flow:**
-- Public subnets → Internet Gateway → Internet
-- Private subnets → NAT Gateway → Internet Gateway → Internet
-
-### Step 3: Security Groups Configuration
-
-**Objective:** Implement layered security with specific security groups for each tier.
-
-**Security Groups Created:**
-1. **ALB Security Group**
-   - Inbound: HTTP (80) and HTTPS (443) from 0.0.0.0/0
-   - Outbound: All traffic
-
-2. **SSH Security Group**
-   - Inbound: SSH (22) from your IP address
-   - Purpose: Bastion host access
-
-3. **Webserver Security Group**
-   - Inbound: HTTP/HTTPS from ALB Security Group
-   - Inbound: SSH from SSH Security Group
-   - Purpose: EC2 instances running WordPress
-
-4. **Database Security Group**
-   - Inbound: MySQL (3306) from Webserver Security Group
-   - Purpose: RDS MySQL instance
-
-5. **EFS Security Group**
-   - Inbound: NFS (2049) from Webserver and EFS Security Groups
-   - Inbound: SSH from SSH Security Group
-   - Purpose: Elastic File System access
-
-### Step 4: AWS MySQL RDS Setup
-
-**Objective:** Deploy managed MySQL database for WordPress data storage.
-
-**Tasks Completed:**
-1. Created RDS subnet group across private subnets
-2. Deployed MySQL RDS instance with Multi-AZ configuration
-3. Configured database security group
-4. Set up database parameters for WordPress compatibility
-
-**Terraform Components:**
-```hcl
-resource "aws_db_instance" "wordpress" {
-  identifier = "wordpress-db"
-  engine     = "mysql"
-  engine_version = "8.0"
-  instance_class = "db.t3.micro"
-  
-  allocated_storage     = 20
-  max_allocated_storage = 100
-  storage_encrypted     = true
-  
-  db_name  = var.db_name
-  username = var.db_username
-  password = var.db_password
-  
-  vpc_security_group_ids = [aws_security_group.database.id]
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  
-  multi_az               = true
-  backup_retention_period = 7
-  backup_window          = "03:00-04:00"
-  maintenance_window     = "sun:04:00-sun:05:00"
-  
-  skip_final_snapshot = true
-}
-```
-
-**Features Implemented:**
-- Multi-AZ deployment for high availability
-- Automated backups with 7-day retention
-- Storage encryption enabled
-- Performance insights enabled
-
-### Step 5: EFS Setup for WordPress Files
-
-**Objective:** Implement shared file storage for WordPress files across multiple instances.
-
-**Tasks Completed:**
-1. Created EFS file system with encryption
-2. Created EFS mount targets in each AZ
-3. Configured EFS security group for NFS access
-4. Set up EFS access points for WordPress
-
-**Terraform Components:**
-```hcl
-resource "aws_efs_file_system" "wordpress" {
-  creation_token   = "wordpress-efs"
-  performance_mode = "generalPurpose"
-  throughput_mode  = "provisioned"
-  encrypted        = true
-  
-  provisioned_throughput_in_mibps = 100
-}
-
-resource "aws_efs_mount_target" "wordpress" {
-  count           = length(var.private_subnet_ids)
-  file_system_id  = aws_efs_file_system.wordpress.id
-  subnet_id       = var.private_subnet_ids[count.index]
-  security_groups = [aws_security_group.efs.id]
-}
-```
-
-**Benefits:**
-- Shared storage across multiple EC2 instances
-- Automatic scaling and high availability
-- Encryption at rest and in transit
-
-### Step 6: Application Load Balancer
-
-**Objective:** Distribute incoming traffic across multiple WordPress instances.
-
-**Tasks Completed:**
-1. Created Application Load Balancer in public subnets
-2. Configured target group for EC2 instances
-3. Set up health checks for WordPress application
-4. Configured listener rules for HTTP/HTTPS traffic
-
-**Terraform Components:**
-```hcl
-resource "aws_lb" "wordpress" {
-  name               = "wordpress-alb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = var.public_subnet_ids
-  
-  enable_deletion_protection = false
-}
-
-resource "aws_lb_target_group" "wordpress" {
-  name     = "wordpress-tg"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = var.vpc_id
-  
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 5
-    interval            = 30
-    path                = "/"
-    matcher             = "200"
-    port                = "traffic-port"
-    protocol            = "HTTP"
-  }
-}
-```
-
-**Load Balancer Features:**
-- Cross-zone load balancing
-- Health checks with automatic failover
-- SSL/TLS termination capability
-- Integration with Auto Scaling Group
-
-### Step 7: Auto Scaling Group
-
-**Objective:** Automatically adjust EC2 instances based on traffic demand.
-
-**Tasks Completed:**
-1. Created launch template with WordPress AMI
-2. Configured Auto Scaling Group across multiple AZs
-3. Set up scaling policies based on CPU utilization
-4. Integrated with Application Load Balancer
-
-**Terraform Components:**
-```hcl
-resource "aws_launch_template" "wordpress" {
-  name_prefix   = "wordpress-"
-  image_id      = var.wordpress_ami
-  instance_type = var.instance_type
-  
-  vpc_security_group_ids = [aws_security_group.webserver.id]
-  
-  user_data = base64encode(templatefile("${path.module}/user-data.sh", {
-    db_endpoint = var.db_endpoint
-    db_name     = var.db_name
-    db_username = var.db_username
-    db_password = var.db_password
-    efs_id      = var.efs_id
-  }))
-  
-  tag_specifications {
-    resource_type = "instance"
-    tags = {
-      Name = "wordpress-instance"
-    }
-  }
-}
-
-resource "aws_autoscaling_group" "wordpress" {
-  name                = "wordpress-asg"
-  vpc_zone_identifier = var.private_subnet_ids
-  target_group_arns   = [aws_lb_target_group.wordpress.arn]
-  health_check_type   = "ELB"
-  
-  min_size         = 2
-  max_size         = 6
-  desired_capacity = 2
-  
-  launch_template {
-    id      = aws_launch_template.wordpress.id
-    version = "$Latest"
-  }
-}
-```
-
-**Auto Scaling Policies:**
-- Scale up when CPU > 70% for 2 consecutive periods
-- Scale down when CPU < 30% for 2 consecutive periods
-- Minimum 2 instances, maximum 6 instances
-
-### Step 8: Route 53 DNS Configuration
-
-**Objective:** Configure DNS for the WordPress domain.
-
-**Tasks Completed:**
-1. Created Route 53 hosted zone
-2. Configured A record pointing to ALB
-3. Set up health checks for failover
-
-## User Data Script
-
-The EC2 instances are configured with a user data script that:
-1. Installs and configures Apache web server
-2. Installs PHP and required extensions
-3. Mounts EFS file system
-4. Downloads and configures WordPress
-5. Connects to RDS database
-6. Sets up WordPress configuration
-
-## Security Measures Implemented
-
-1. **Network Security:**
-   - Private subnets for application and database tiers
-   - Security groups with least privilege access
-   - NAT Gateway for controlled outbound access
-
-2. **Data Protection:**
-   - RDS encryption at rest
-   - EFS encryption at rest and in transit
-   - SSL/TLS for web traffic
-
-3. **Access Control:**
-   - IAM roles for EC2 instances
-   - Security groups for service isolation
-   - SSH access restricted to specific IP ranges
-
-4. **Monitoring:**
-   - CloudWatch logs and metrics
-   - ALB health checks
-   - Auto Scaling notifications
-
-## Deployment Instructions
-
-1. **Clone Repository:**
-   ```bash
-   git clone <repository-url>
-   cd terraform-wordpress
-   ```
-
-2. **Configure Variables:**
-   ```bash
-   cp terraform.tfvars.example terraform.tfvars
-   # Edit terraform.tfvars with your specific values
-   ```
-
-3. **Initialize Terraform:**
-   ```bash
-   terraform init
-   ```
-
-4. **Plan Deployment:**
-   ```bash
-   terraform plan
-   ```
-
-5. **Apply Configuration:**
-   ```bash
-   terraform apply
-   ```
-
-6. **Access WordPress:**
-   - Use the ALB DNS name provided in outputs
-   - Complete WordPress installation wizard
-
-## Testing and Validation
-
-### Functionality Testing
-1. **WordPress Installation:** Verify WordPress loads correctly
-2. **Database Connectivity:** Confirm database connection works
-3. **File Upload:** Test file uploads to EFS
-4. **Load Balancing:** Verify traffic distribution across instances
-
-### Auto Scaling Demonstration
-1. **Load Testing:** Use tools like Apache Bench or Artillery
-2. **Monitor Scaling:** Watch CloudWatch metrics and ASG activity
-3. **Verify Performance:** Ensure application remains responsive
-
-### Security Validation
-1. **Network Access:** Verify security group rules
-2. **Database Security:** Confirm RDS is not publicly accessible
-3. **SSL/TLS:** Test HTTPS configuration if implemented
-
-## Monitoring and Maintenance
-
-1. **CloudWatch Dashboards:** Monitor key metrics
-2. **Log Aggregation:** Centralize application logs
-3. **Backup Strategy:** Verify RDS automated backups
-4. **Security Updates:** Regular AMI updates for EC2 instances
-
-## Cost Optimization
-
-1. **Reserved Instances:** Consider RIs for predictable workloads
-2. **EFS Storage Classes:** Use appropriate storage classes
-3. **Auto Scaling:** Right-size instances based on usage patterns
-4. **Monitoring:** Set up billing alerts
-
-## Cleanup
-
-To destroy all resources:
 ```bash
-terraform destroy
+sudo apt update
+```
+
+### Step 2: Install Ansible
+
+Install Ansible using your distribution's package manager:
+
+```bash
+sudo apt install ansible -y
+```
+
+### Step 3: Verify Installation
+
+Confirm that Ansible was installed successfully:
+
+```bash
+ansible --version
+```
+
+Expected output should display the Ansible version and configuration details.
+
+## Configuration
+
+### Step 4: Configure SSH Key-Based Authentication
+
+#### Generate SSH Key Pair
+
+Create an SSH key pair on the control node for passwordless authentication:
+
+```bash
+ssh-keygen -t rsa
+```
+
+When prompted:
+- Press **Enter** to accept the default file location (`~/.ssh/id_rsa`)
+- Press **Enter** to use an empty passphrase (or set one if preferred)
+
+#### Copy Public Key to Target Machines
+
+Distribute your public key to each target machine:
+
+```bash
+ssh-copy-id user@<target-server-ip>
+```
+
+Replace `user` with the actual username and `<target-server-ip>` with the target machine's IP address.
+
+#### Test SSH Connection
+
+Verify passwordless SSH access:
+
+```bash
+ssh user@<target-server-ip>
+```
+
+You should be able to connect without entering a password.
+
+### Step 5: Create Ansible Inventory
+
+#### Set Up Ansible Directory
+
+Create a dedicated directory for Ansible configuration:
+
+```bash
+mkdir ~/ansible
+cd ~/ansible
+```
+
+#### Create Inventory File
+
+Create an inventory file to define your target machines:
+
+```bash
+nano inventory.ini
+```
+
+Add your target machines to the inventory:
+
+```ini
+[linux_servers]
+target1 ansible_host=<target1-ip> ansible_user=<username>
+target2 ansible_host=<target2-ip> ansible_user=<username>
+```
+
+**Configuration parameters:**
+- `target1`, `target2`: Friendly names for your servers
+- `ansible_host`: IP address or hostname of the target machine
+- `ansible_user`: Username for SSH connection
+
+Save and close the file (`Ctrl+X`, then `Y`, then `Enter` in nano).
+
+## Testing and Verification
+
+### Step 6: Test Ansible Connectivity
+
+Verify that Ansible can communicate with your target machines:
+
+```bash
+ansible -i inventory.ini linux_servers -m ping
+```
+
+**Expected output:**
+```
+target1 | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}
+target2 | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}
+```
+
+A "pong" response indicates successful connectivity to each target machine.
+
+## Usage Examples
+
+### Step 7: Run Ad-Hoc Commands
+
+Now you can execute commands across your infrastructure:
+
+#### Check System Uptime
+
+```bash
+ansible -i inventory.ini linux_servers -m command -a "uptime"
+```
+
+#### Check Disk Usage
+
+```bash
+ansible -i inventory.ini linux_servers -m shell -a "df -h"
+```
+
+#### Get System Information
+
+```bash
+ansible -i inventory.ini linux_servers -m setup
 ```
 
 ## Troubleshooting
 
 ### Common Issues
-1. **Database Connection Errors:** Check security groups and RDS status
-2. **EFS Mount Issues:** Verify NFS security group rules
-3. **Load Balancer Health Checks:** Ensure WordPress is responding on port 80
-4. **Auto Scaling Issues:** Check launch template and IAM permissions
 
-### Useful Commands
+**SSH Connection Refused**
 ```bash
-# Check Terraform state
-terraform show
-
-# Validate configuration
-terraform validate
-
-# Format code
-terraform fmt
-
-# Check outputs
-terraform output
+# Check if SSH service is running on target
+ssh user@target-ip
+# If connection fails, ensure SSH is installed and running on target machine
 ```
 
-## Documentation Deliverables
+**Permission Denied**
+```bash
+# Ensure SSH key was copied correctly
+ssh-copy-id user@target-ip
+# Verify SSH key exists
+ls -la ~/.ssh/
+```
 
-This project includes comprehensive documentation covering:
-- Architecture diagrams and component explanations
-- Security measures and best practices implementation
-- Step-by-step deployment procedures
-- Testing and validation procedures
-- Troubleshooting guides and maintenance procedures
+**Ansible Command Not Found**
+```bash
+# Reinstall Ansible
+sudo apt update
+sudo apt install ansible -y
+```
 
-## Live Demonstration
+**Host Key Verification Failed**
+```bash
+# Add host to known_hosts
+ssh-keyscan -H target-ip >> ~/.ssh/known_hosts
+```
 
-The project supports live demonstration of:
-1. **WordPress Functionality:** Full website operation
-2. **Auto Scaling:** Simulated traffic load testing
-3. **High Availability:** Instance failure recovery
-4. **Security Features:** Network isolation and access controls
+### Verification Commands
 
+```bash
+# Check Ansible version
+ansible --version
+
+# List all hosts in inventory
+ansible -i inventory.ini --list-hosts all
+
+# Test connection to specific group
+ansible -i inventory.ini linux_servers -m ping
+
+# Check Ansible configuration
+ansible-config dump
+```
+
+## Next Steps
+
+With Ansible successfully set up, you can now explore advanced features:
+
+### Recommended Learning Path
+1. **Ansible Playbooks** - Create YAML files for complex automation tasks
+2. **Ansible Roles** - Organize your automation code into reusable components
+3. **Ansible Vault** - Secure sensitive data like passwords and keys
+4. **Ansible Galaxy** - Use community-contributed roles and collections
+5. **Ansible AWX/Tower** - Web-based interface for Ansible automation
+
+### Sample Playbook Creation
+
+Create your first playbook:
+
+```bash
+nano first-playbook.yml
+```
+
+```yaml
 ---
+- name: My First Playbook
+  hosts: linux_servers
+  tasks:
+    - name: Ensure a package is installed
+      apt:
+        name: htop
+        state: present
+      become: yes
+```
 
-**Note:** This implementation follows AWS Well-Architected Framework principles for security, reliability, performance efficiency, cost optimization, and operational excellence.
+Run the playbook:
+
+```bash
+ansible-playbook -i inventory.ini first-playbook.yml
+```
+
+## Project Structure
+
+```
+~/ansible/
+├── inventory.ini          # Host inventory file
+├── ansible.cfg           # Ansible configuration (optional)
+├── playbooks/            # Directory for playbooks
+│   └── first-playbook.yml
+└── roles/                # Directory for custom roles
+```
+
+## Conclusion
+
+You have successfully:
+- ✅ Installed Ansible on a Linux control node
+- ✅ Configured SSH key-based authentication
+- ✅ Created an inventory file for target machines
+- ✅ Verified connectivity using ping module
+- ✅ Executed ad-hoc commands across your infrastructure
+
+Your Ansible environment is now ready for automating IT infrastructure tasks, deploying applications, and managing server configurations at scale.
