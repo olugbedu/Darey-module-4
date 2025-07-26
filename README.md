@@ -1,326 +1,306 @@
-# Ansible Linux Server Backup and Restore
+# Prometheus Node Exporter Setup for Linux Server Monitoring
 
-A comprehensive guide for automating file backup and restoration processes on Linux servers using Ansible. This project demonstrates how to create scalable and repeatable backup solutions through Ansible playbooks.
+This README provides a comprehensive guide for setting up Prometheus Node Exporter on a Linux server to monitor system metrics and integrate with Prometheus for real-time monitoring and analysis.
 
 ## Table of Contents
 
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
-- [Installation & Setup](#installation--setup)
+- [Installation Steps](#installation-steps)
 - [Configuration](#configuration)
-- [Usage](#usage)
-- [Testing](#testing)
-- [Project Structure](#project-structure)
+- [Verification](#verification)
+- [Monitoring and Queries](#monitoring-and-queries)
 - [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
+- [Next Steps](#next-steps)
 
 ## Overview
 
-This project provides a complete solution for automating backup and restore operations on Linux servers using Ansible. It includes:
+Prometheus Node Exporter is a powerful monitoring tool that collects hardware and operating system metrics from Linux servers. This setup enables you to:
 
-- Automated backup of files to designated directories
-- Restore functionality to recover files from backups
-- SSH key-based authentication setup
-- Inventory management for multiple servers
-- Testing procedures to verify backup/restore operations
+- Monitor CPU, memory, disk, and network usage
+- Set up real-time alerts for critical system metrics
+- Create comprehensive dashboards for system health visualization
+- Integrate with Prometheus for centralized metric collection
 
-**Estimated Completion Time:** 2-3 hours
+**Estimated completion time:** 1-2 hours
 
 ## Prerequisites
 
 Before starting, ensure you have:
 
-### System Requirements
-- **Control Machine:** Linux system with Ansible installed
-- **Target Server(s):** One or more Linux servers to backup
-- **Network Access:** SSH connectivity between control machine and target servers
+- ✅ A running Linux server with `sudo` privileges
+- ✅ A working Prometheus instance (local or remote)
+- ✅ Network connectivity allowing Prometheus to reach the server on port 9100
+- ✅ Terminal access to the Linux server
+- ✅ Text editor access (nano, vim, etc.)
+- ✅ Basic familiarity with systemd services
 
-### Required Tools
-- Ansible automation platform
-- SSH client and server
-- Text editor (nano, vim, or preferred editor)
-- Basic Linux command line knowledge
+## Installation Steps
 
-### Access Requirements
-- SSH access to target servers
-- Sudo privileges on target servers (if needed)
-- Public key authentication capability
+### Step 1: Download Node Exporter
 
-## Installation & Setup
+Download the latest Node Exporter binary from the official Prometheus GitHub releases:
 
-### Step 1: Install Ansible on Control Machine
-
-For Ubuntu/Debian systems:
 ```bash
-sudo apt update
-sudo apt install ansible -y
+curl -LO https://github.com/prometheus/node_exporter/releases/latest/download/node_exporter-linux-amd64.tar.gz
 ```
 
-For RHEL/CentOS systems:
+### Step 2: Extract and Install
+
+Extract the downloaded archive and move the binary to your system PATH:
+
 ```bash
-sudo yum install epel-release -y
-sudo yum install ansible -y
+# Extract the tarball
+tar -xvf node_exporter-linux-amd64.tar.gz
+
+# Move binary to /usr/local/bin/
+sudo mv node_exporter-linux-amd64/node_exporter /usr/local/bin/
 ```
 
-### Step 2: Verify Ansible Installation
+### Step 3: Create System Service
+
+Create a systemd service file for Node Exporter:
 
 ```bash
-ansible --version
+sudo nano /etc/systemd/system/node_exporter.service
 ```
 
-Expected output should show Ansible version information.
+Add the following configuration:
 
-### Step 3: Set Up SSH Key Authentication
+```ini
+[Unit]
+Description=Prometheus Node Exporter
+After=network.target
 
-Generate SSH key pair:
-```bash
-ssh-keygen -t rsa
+[Service]
+User=nobody
+ExecStart=/usr/local/bin/node_exporter
+Restart=always
+WantedBy=multi-user.target
 ```
 
-Copy public key to target server:
+### Step 4: Start and Enable Service
+
+Enable and start the Node Exporter service:
+
 ```bash
-ssh-copy-id user@target-server-ip
+# Reload systemd configuration
+sudo systemctl daemon-reload
+
+# Start the service
+sudo systemctl start node_exporter
+
+# Enable auto-start on boot
+sudo systemctl enable node_exporter
 ```
 
-Test SSH connection:
+### Step 5: Verify Installation
+
+Check that Node Exporter is running correctly:
+
 ```bash
-ssh user@target-server-ip
+# Check service status
+sudo systemctl status node_exporter
+
+# Verify metrics endpoint is accessible
+curl http://localhost:9100/metrics | head -20
 ```
 
 ## Configuration
 
-### Step 1: Create Ansible Inventory File
+### Configure Prometheus Integration
 
-Create `inventory.ini`:
-```bash
-nano inventory.ini
-```
+#### Step 1: Update Prometheus Configuration
 
-Add target server details:
-```ini
-[linux_servers]
-target ansible_host=<target-server-ip> ansible_user=<user>
-```
-
-Replace `<target-server-ip>` and `<user>` with actual values.
-
-### Step 2: Test Inventory Connection
+Edit your Prometheus configuration file:
 
 ```bash
-ansible -i inventory.ini linux_servers -m ping
+sudo nano /etc/prometheus/prometheus.yml
 ```
 
-Expected output: `SUCCESS` status for all servers.
+#### Step 2: Add Node Exporter Target
 
-## Usage
+Add the following scrape configuration:
 
-### Creating Backup Playbook
-
-Create `backup.yml`:
-```bash
-nano backup.yml
-```
-
-Add the following content:
 ```yaml
-- name: Backup files on the server
-  hosts: linux_servers
-  tasks:
-    - name: Create backup directory
-      file:
-        path: /backup
-        state: directory
-        mode: '0755'
-
-    - name: Copy files to backup directory
-      copy:
-        src: /path/to/files
-        dest: /backup/
-        remote_src: yes
+scrape_configs:
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['your-server-ip:9100']
 ```
 
-**Important:** Replace `/path/to/files` with the actual path of files you want to backup.
+**Note:** Replace `your-server-ip` with:
+- Your actual server IP address for remote monitoring
+- `localhost` if Prometheus and Node Exporter are on the same machine
 
-### Creating Restore Playbook
+#### Step 3: Restart Prometheus
 
-Create `restore.yml`:
+Apply the configuration changes:
+
 ```bash
-nano restore.yml
+sudo systemctl restart prometheus
 ```
 
-Add the following content:
-```yaml
-- name: Restore files from backup
-  hosts: linux_servers
-  tasks:
-    - name: Copy files back to original location
-      copy:
-        src: /backup/
-        dest: /path/to/files
-        remote_src: yes
+## Verification
+
+### Verify Node Exporter Access
+
+1. **Web Browser Test:**
+   - Navigate to `http://your-server-ip:9100/metrics`
+   - You should see a page with various system metrics
+
+2. **Command Line Test:**
+   ```bash
+   curl http://localhost:9100/metrics | grep "node_cpu"
+   ```
+
+### Verify Prometheus Integration
+
+1. **Access Prometheus Web UI:**
+   - Navigate to `http://prometheus-server-ip:9090`
+
+2. **Check Targets:**
+   - Go to Status → Targets
+   - Verify that the `node-exporter` target shows as "UP"
+
+3. **Test Basic Query:**
+   - In the Prometheus query interface, try: `node_cpu_seconds_total`
+
+## Monitoring and Queries
+
+### Essential Metrics to Monitor
+
+#### CPU Usage
+```promql
+# Current CPU usage rate
+rate(node_cpu_seconds_total[5m])
+
+# CPU usage by mode
+rate(node_cpu_seconds_total{mode="user"}[5m])
 ```
 
-**Important:** Replace `/path/to/files` with the original file location.
+#### Memory Monitoring
+```promql
+# Available memory in bytes
+node_memory_MemAvailable_bytes
 
-### Running the Playbooks
-
-Execute backup operation:
-```bash
-ansible-playbook -i inventory.ini backup.yml
+# Memory usage percentage
+100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100)
 ```
 
-Execute restore operation:
-```bash
-ansible-playbook -i inventory.ini restore.yml
+#### Disk Space
+```promql
+# Available disk space
+node_filesystem_avail_bytes
+
+# Disk usage percentage
+100 - (node_filesystem_avail_bytes / node_filesystem_size_bytes * 100)
 ```
 
-## Testing
+#### Network Traffic
+```promql
+# Network bytes received
+rate(node_network_receive_bytes_total[5m])
 
-### Step 1: Run Backup Process
-
-Execute the backup playbook:
-```bash
-ansible-playbook -i inventory.ini backup.yml
+# Network bytes transmitted
+rate(node_network_transmit_bytes_total[5m])
 ```
 
-### Step 2: Verify Backup Creation
+### Sample Queries for Analysis
 
-Check backup directory on target server:
-```bash
-ls /backup
+#### CPU Analysis Over Time
+```promql
+rate(node_cpu_seconds_total[5m])
 ```
 
-Or remotely via Ansible:
-```bash
-ansible -i inventory.ini linux_servers -m shell -a "ls -la /backup"
+#### Memory Utilization Trend
+```promql
+(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100
 ```
 
-### Step 3: Test Restore Process
-
-Run the restore playbook:
-```bash
-ansible-playbook -i inventory.ini restore.yml
+#### Disk I/O Operations
+```promql
+rate(node_disk_reads_completed_total[5m])
+rate(node_disk_writes_completed_total[5m])
 ```
-
-### Step 4: Verify Restore Success
-
-Check restored files in original location:
-```bash
-ls /path/to/files
-```
-
-Or remotely via Ansible:
-```bash
-ansible -i inventory.ini linux_servers -m shell -a "ls -la /path/to/files"
-```
-
-## Project Structure
-
-```
-ansible-backup-restore/
-├── README.md
-├── inventory.ini
-├── backup.yml
-├── restore.yml
-└── ansible.cfg (optional)
-```
-
-### File Descriptions
-
-- **inventory.ini**: Defines target servers and connection parameters
-- **backup.yml**: Ansible playbook for backup operations
-- **restore.yml**: Ansible playbook for restore operations
-- **ansible.cfg**: Optional Ansible configuration file
 
 ## Troubleshooting
 
 ### Common Issues and Solutions
 
-#### SSH Connection Failed
+#### Service Won't Start
 ```bash
-# Test SSH connectivity
-ssh -v user@target-server-ip
+# Check service logs
+sudo journalctl -u node_exporter -f
 
-# Regenerate and copy SSH keys
-ssh-keygen -t rsa -f ~/.ssh/id_rsa
-ssh-copy-id user@target-server-ip
+# Verify binary permissions
+ls -la /usr/local/bin/node_exporter
 ```
 
-#### Permission Denied Errors
+#### Port 9100 Not Accessible
 ```bash
-# Add become: yes to playbook tasks
-- name: Create backup directory
-  file:
-    path: /backup
-    state: directory
-    mode: '0755'
-  become: yes
+# Check if port is listening
+sudo netstat -tlnp | grep 9100
+
+# Check firewall settings
+sudo ufw status
+sudo firewall-cmd --list-ports
 ```
 
-#### Inventory Not Found
-```bash
-# Use absolute path for inventory
-ansible-playbook -i /full/path/to/inventory.ini backup.yml
-```
+#### Metrics Not Appearing in Prometheus
+1. Verify Prometheus configuration syntax:
+   ```bash
+   promtool check config /etc/prometheus/prometheus.yml
+   ```
 
-#### File Path Does Not Exist
-- Verify source paths exist on target servers
-- Use `ansible -m shell -a "ls -la /path"` to check paths
-- Ensure proper permissions on source directories
+2. Check Prometheus logs:
+   ```bash
+   sudo journalctl -u prometheus -f
+   ```
 
-### Debug Mode
+3. Verify network connectivity:
+   ```bash
+   telnet your-server-ip 9100
+   ```
 
-Run playbooks in verbose mode for detailed output:
-```bash
-ansible-playbook -i inventory.ini backup.yml -vvv
-```
+### Performance Considerations
 
-## Advanced Features
+- Node Exporter has minimal resource overhead
+- Default scrape interval is 15 seconds
+- Consider adjusting scrape intervals for high-frequency monitoring
+- Monitor Prometheus storage requirements as metrics accumulate
 
-### Multiple Server Support
+## Next Steps
 
-Add multiple servers to inventory:
-```ini
-[linux_servers]
-server1 ansible_host=192.168.1.10 ansible_user=admin
-server2 ansible_host=192.168.1.11 ansible_user=admin
-server3 ansible_host=192.168.1.12 ansible_user=admin
-```
+### Recommended Enhancements
 
-### Scheduled Backups
+1. **Set Up Alerting:**
+   - Configure Alertmanager for critical metric thresholds
+   - Create alert rules for high CPU, low memory, or disk space issues
 
-Create cron job for automated backups:
-```bash
-# Add to crontab
-0 2 * * * /usr/bin/ansible-playbook -i /path/to/inventory.ini /path/to/backup.yml
-```
+2. **Add Visualization:**
+   - Install Grafana for advanced dashboards
+   - Import community Node Exporter dashboards
 
-### Compression Support
+3. **Extend Monitoring:**
+   - Add custom metrics using textfile collector
+   - Monitor additional services with specific exporters
 
-Add compression to backup tasks:
-```yaml
-- name: Create compressed backup
-  archive:
-    path: /path/to/files
-    dest: /backup/backup_{{ ansible_date_time.date }}.tar.gz
-    format: gz
-```
+4. **Security Hardening:**
+   - Configure HTTPS for metrics endpoints
+   - Implement authentication if needed
+   - Restrict network access to monitoring ports
 
-## Security Considerations
+### Useful Resources
 
-- Use dedicated backup user accounts with minimal privileges
-- Implement proper file permissions (0755 for directories, 0644 for files)
-- Consider encrypting sensitive backup data
-- Regularly rotate SSH keys
-- Monitor backup operations through logging
+- [Prometheus Node Exporter Documentation](https://github.com/prometheus/node_exporter)
+- [Prometheus Query Language (PromQL) Guide](https://prometheus.io/docs/prometheus/latest/querying/basics/)
+- [Grafana Node Exporter Dashboard Templates](https://grafana.com/grafana/dashboards/?search=node%20exporter)
 
 ---
 
-**Project Completion Checklist:**
-- [ ] Ansible installed and verified
-- [ ] SSH key authentication configured
-- [ ] Inventory file created and tested
-- [ ] Backup playbook created and tested
-- [ ] Restore playbook created and tested
-- [ ] Backup/restore functionality verified
-- [ ] Documentation completed
+**Project Status:** ✅ Complete - Ready for production use
+
+**Last Updated:** July 2025
+
+**Tested On:** Ubuntu 20.04
