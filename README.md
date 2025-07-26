@@ -1,369 +1,474 @@
-# Terraform EC2 Module and Security Group Module with Apache2 UserData
-
-This project demonstrates how to create modularized Terraform configurations for deploying an EC2 instance with a Security Group and Apache2 web server using UserData scripts.
+# Terraform Capstone Project: Automated WordPress Deployment on AWS
 
 ## Project Overview
 
-**Purpose:** Learn to use Terraform modules for creating reusable, modular infrastructure components that deploy an EC2 instance with Apache2 pre-configured.
+This project demonstrates the implementation of a scalable, secure, and cost-effective WordPress hosting solution on AWS using Terraform Infrastructure as Code (IaC). The solution is designed for DigitalBoost, a digital marketing agency requiring a high-performance WordPress website with automated deployment capabilities.
 
-**Key Learning Objectives:**
-- Create reusable Terraform modules
-- Configure EC2 instances through Terraform
-- Implement Security Group modules
-- Use UserData scripts for automated software installation
+## Architecture Overview
+
+The infrastructure spans across 2 Availability Zones for high availability and includes:
+- VPC with public and private subnets
+- Internet Gateway and NAT Gateway
+- Application Load Balancer
+- Auto Scaling Group with EC2 instances
+- Amazon RDS MySQL database
+- Amazon EFS for shared file storage
+- Route 53 for DNS management
+- Comprehensive security groups
+
+## Prerequisites
+
+- AWS CLI configured with appropriate credentials
+- Terraform installed (version 0.12+)
+- Knowledge of TechOps Essentials
+- Completion of Core 2 Courses and Mini Projects
+- Basic understanding of AWS services and networking concepts
 
 ## Project Structure
 
 ```
-terraform-ec2-apache/
+terraform-wordpress/
 ├── README.md
 ├── main.tf
-├── apache_userdata.sh
-└── modules/
-    ├── ec2/
-    │   └── main.tf
-    └── security_group/
-        └── main.tf
+├── variables.tf
+├── outputs.tf
+├── terraform.tfvars
+├── modules/
+│   ├── vpc/
+│   ├── security-groups/
+│   ├── rds/
+│   ├── efs/
+│   ├── alb/
+│   └── autoscaling/
+└── scripts/
+    └── user-data.sh
 ```
 
-## Getting Started
+## Implementation Steps
 
-### Prerequisites
+### Step 1: VPC Setup
 
-- AWS CLI installed and configured with appropriate credentials
-- Terraform installed on your local machine
-- Basic understanding of AWS EC2 and Security Groups
+**Objective:** Create a Virtual Private Cloud (VPC) to isolate and secure the WordPress infrastructure.
 
-### Verify AWS Configuration
-```bash
-aws configure list
-aws sts get-caller-identity
-```
+**Tasks Completed:**
+1. Define IP address range for the VPC (10.0.0.0/16)
+2. Create VPC with public and private subnets across 2 AZs
+3. Configure route tables for each subnet type
 
-## Step-by-Step Implementation
-
-### Step 1: Project Setup
-
-1. **Create the main project directory:**
-```bash
-mkdir terraform-ec2-apache
-cd terraform-ec2-apache
-```
-
-2. **Create the module directory structure:**
-```bash
-mkdir -p modules/ec2
-mkdir -p modules/security_group
-```
-
-### Step 2: Create the Security Group Module
-
-Create the Security Group module configuration:
-
-```bash
-nano modules/security_group/main.tf
-```
-
-**File Content:**
+**Terraform Components:**
 ```hcl
-# modules/security_group/main.tf
-resource "aws_security_group" "web_sg" {
-  name        = "web-security-group"
-  description = "Security group for web server"
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
+# VPC Configuration
+resource "aws_vpc" "main" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+  
   tags = {
-    Name = "Web Security Group"
+    Name = "wordpress-vpc"
   }
 }
-
-output "security_group_id" {
-  value = aws_security_group.web_sg.id
-}
 ```
 
-### Step 3: Create the EC2 Module
+**Key Features:**
+- Multi-AZ deployment for high availability
+- Separate public and private subnets
+- DNS resolution enabled
 
-Create the EC2 module configuration:
+### Step 2: Public and Private Subnets with NAT Gateway
 
-```bash
-nano modules/ec2/main.tf
-```
+**Objective:** Implement secure network architecture with NAT Gateway for private subnet internet access.
 
-**File Content:**
+**Tasks Completed:**
+1. Created public subnets in 2 AZs for internet-facing resources
+2. Created private subnets in 2 AZs for application and database tiers
+3. Deployed NAT Gateway in public subnet for outbound internet access
+4. Configured route tables with appropriate associations
+
+**Terraform Components:**
 ```hcl
-# modules/ec2/main.tf
-variable "security_group_id" {
-  description = "Security group ID for the EC2 instance"
-  type        = string
+# Public Subnets
+resource "aws_subnet" "public" {
+  count                   = length(var.availability_zones)
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.public_subnet_cidrs[count.index]
+  availability_zone       = var.availability_zones[count.index]
+  map_public_ip_on_launch = true
 }
 
-variable "user_data" {
-  description = "User data script for the EC2 instance"
-  type        = string
-}
-
-variable "instance_type" {
-  description = "EC2 instance type"
-  type        = string
-  default     = "t2.micro"
-}
-
-variable "key_name" {
-  description = "Key pair name for EC2 instance"
-  type        = string
-  default     = ""
-}
-
-data "aws_ami" "amazon_linux" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
-  }
-}
-
-resource "aws_instance" "web_server" {
-  ami                    = data.aws_ami.amazon_linux.id
-  instance_type          = var.instance_type
-  key_name              = var.key_name
-  vpc_security_group_ids = [var.security_group_id]
-  user_data             = var.user_data
-
-  tags = {
-    Name = "Apache Web Server"
-  }
-}
-
-output "instance_id" {
-  value = aws_instance.web_server.id
-}
-
-output "public_ip" {
-  value = aws_instance.web_server.public_ip
-}
-
-output "public_dns" {
-  value = aws_instance.web_server.public_dns
+# NAT Gateway
+resource "aws_nat_gateway" "main" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public[0].id
 }
 ```
 
-### Step 4: Create the UserData Script
+**Network Flow:**
+- Public subnets → Internet Gateway → Internet
+- Private subnets → NAT Gateway → Internet Gateway → Internet
 
-Create the Apache2 installation script:
+### Step 3: Security Groups Configuration
 
-```bash
-nano apache_userdata.sh
-```
+**Objective:** Implement layered security with specific security groups for each tier.
 
-**File Content:**
-```bash
-#!/bin/bash
-sudo yum update -y
-sudo yum install -y httpd
-sudo systemctl start httpd
-sudo systemctl enable httpd
-echo "Hello World from $(hostname -f)/hi!" | sudo tee /var/www/html/index.html
-```
+**Security Groups Created:**
+1. **ALB Security Group**
+   - Inbound: HTTP (80) and HTTPS (443) from 0.0.0.0/0
+   - Outbound: All traffic
 
-**Make the script executable:**
-```bash
-chmod +x apache_userdata.sh
-```
+2. **SSH Security Group**
+   - Inbound: SSH (22) from your IP address
+   - Purpose: Bastion host access
 
-### Step 5: Create the Main Terraform Configuration
+3. **Webserver Security Group**
+   - Inbound: HTTP/HTTPS from ALB Security Group
+   - Inbound: SSH from SSH Security Group
+   - Purpose: EC2 instances running WordPress
 
-Create the main configuration file:
+4. **Database Security Group**
+   - Inbound: MySQL (3306) from Webserver Security Group
+   - Purpose: RDS MySQL instance
 
-```bash
-nano main.tf
-```
+5. **EFS Security Group**
+   - Inbound: NFS (2049) from Webserver and EFS Security Groups
+   - Inbound: SSH from SSH Security Group
+   - Purpose: Elastic File System access
 
-**File Content:**
+### Step 4: AWS MySQL RDS Setup
+
+**Objective:** Deploy managed MySQL database for WordPress data storage.
+
+**Tasks Completed:**
+1. Created RDS subnet group across private subnets
+2. Deployed MySQL RDS instance with Multi-AZ configuration
+3. Configured database security group
+4. Set up database parameters for WordPress compatibility
+
+**Terraform Components:**
 ```hcl
-# main.tf
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
+resource "aws_db_instance" "wordpress" {
+  identifier = "wordpress-db"
+  engine     = "mysql"
+  engine_version = "8.0"
+  instance_class = "db.t3.micro"
+  
+  allocated_storage     = 20
+  max_allocated_storage = 100
+  storage_encrypted     = true
+  
+  db_name  = var.db_name
+  username = var.db_username
+  password = var.db_password
+  
+  vpc_security_group_ids = [aws_security_group.database.id]
+  db_subnet_group_name   = aws_db_subnet_group.main.name
+  
+  multi_az               = true
+  backup_retention_period = 7
+  backup_window          = "03:00-04:00"
+  maintenance_window     = "sun:04:00-sun:05:00"
+  
+  skip_final_snapshot = true
+}
+```
+
+**Features Implemented:**
+- Multi-AZ deployment for high availability
+- Automated backups with 7-day retention
+- Storage encryption enabled
+- Performance insights enabled
+
+### Step 5: EFS Setup for WordPress Files
+
+**Objective:** Implement shared file storage for WordPress files across multiple instances.
+
+**Tasks Completed:**
+1. Created EFS file system with encryption
+2. Created EFS mount targets in each AZ
+3. Configured EFS security group for NFS access
+4. Set up EFS access points for WordPress
+
+**Terraform Components:**
+```hcl
+resource "aws_efs_file_system" "wordpress" {
+  creation_token   = "wordpress-efs"
+  performance_mode = "generalPurpose"
+  throughput_mode  = "provisioned"
+  encrypted        = true
+  
+  provisioned_throughput_in_mibps = 100
+}
+
+resource "aws_efs_mount_target" "wordpress" {
+  count           = length(var.private_subnet_ids)
+  file_system_id  = aws_efs_file_system.wordpress.id
+  subnet_id       = var.private_subnet_ids[count.index]
+  security_groups = [aws_security_group.efs.id]
+}
+```
+
+**Benefits:**
+- Shared storage across multiple EC2 instances
+- Automatic scaling and high availability
+- Encryption at rest and in transit
+
+### Step 6: Application Load Balancer
+
+**Objective:** Distribute incoming traffic across multiple WordPress instances.
+
+**Tasks Completed:**
+1. Created Application Load Balancer in public subnets
+2. Configured target group for EC2 instances
+3. Set up health checks for WordPress application
+4. Configured listener rules for HTTP/HTTPS traffic
+
+**Terraform Components:**
+```hcl
+resource "aws_lb" "wordpress" {
+  name               = "wordpress-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb.id]
+  subnets            = var.public_subnet_ids
+  
+  enable_deletion_protection = false
+}
+
+resource "aws_lb_target_group" "wordpress" {
+  name     = "wordpress-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = var.vpc_id
+  
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+    interval            = 30
+    path                = "/"
+    matcher             = "200"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+  }
+}
+```
+
+**Load Balancer Features:**
+- Cross-zone load balancing
+- Health checks with automatic failover
+- SSL/TLS termination capability
+- Integration with Auto Scaling Group
+
+### Step 7: Auto Scaling Group
+
+**Objective:** Automatically adjust EC2 instances based on traffic demand.
+
+**Tasks Completed:**
+1. Created launch template with WordPress AMI
+2. Configured Auto Scaling Group across multiple AZs
+3. Set up scaling policies based on CPU utilization
+4. Integrated with Application Load Balancer
+
+**Terraform Components:**
+```hcl
+resource "aws_launch_template" "wordpress" {
+  name_prefix   = "wordpress-"
+  image_id      = var.wordpress_ami
+  instance_type = var.instance_type
+  
+  vpc_security_group_ids = [aws_security_group.webserver.id]
+  
+  user_data = base64encode(templatefile("${path.module}/user-data.sh", {
+    db_endpoint = var.db_endpoint
+    db_name     = var.db_name
+    db_username = var.db_username
+    db_password = var.db_password
+    efs_id      = var.efs_id
+  }))
+  
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "wordpress-instance"
     }
   }
 }
 
-provider "aws" {
-  region = var.aws_region
-}
-
-variable "aws_region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "key_name" {
-  description = "EC2 Key Pair name"
-  type        = string
-  default     = ""
-}
-
-module "security_group" {
-  source = "./modules/security_group"
-}
-
-module "ec2_instance" {
-  source            = "./modules/ec2"
-  security_group_id = module.security_group.security_group_id
-  user_data         = file("apache_userdata.sh")
-  key_name          = var.key_name
-}
-
-output "instance_public_ip" {
-  description = "Public IP address of the EC2 instance"
-  value       = module.ec2_instance.public_ip
-}
-
-output "instance_public_dns" {
-  description = "Public DNS name of the EC2 instance"
-  value       = module.ec2_instance.public_dns
-}
-
-output "apache_url" {
-  description = "URL to access Apache web server"
-  value       = "http://${module.ec2_instance.public_ip}"
+resource "aws_autoscaling_group" "wordpress" {
+  name                = "wordpress-asg"
+  vpc_zone_identifier = var.private_subnet_ids
+  target_group_arns   = [aws_lb_target_group.wordpress.arn]
+  health_check_type   = "ELB"
+  
+  min_size         = 2
+  max_size         = 6
+  desired_capacity = 2
+  
+  launch_template {
+    id      = aws_launch_template.wordpress.id
+    version = "$Latest"
+  }
 }
 ```
 
-### Step 6: Deploy the Infrastructure
+**Auto Scaling Policies:**
+- Scale up when CPU > 70% for 2 consecutive periods
+- Scale down when CPU < 30% for 2 consecutive periods
+- Minimum 2 instances, maximum 6 instances
 
-1. **Initialize Terraform:**
-```bash
-terraform init
-```
+### Step 8: Route 53 DNS Configuration
 
-2. **Plan the deployment:**
-```bash
-terraform plan
-```
+**Objective:** Configure DNS for the WordPress domain.
 
-3. **Apply the configuration:**
-```bash
-terraform apply
-```
+**Tasks Completed:**
+1. Created Route 53 hosted zone
+2. Configured A record pointing to ALB
+3. Set up health checks for failover
 
-Type `yes` when prompted to confirm the deployment.
+## User Data Script
 
-### Step 7: Verify the Deployment
+The EC2 instances are configured with a user data script that:
+1. Installs and configures Apache web server
+2. Installs PHP and required extensions
+3. Mounts EFS file system
+4. Downloads and configures WordPress
+5. Connects to RDS database
+6. Sets up WordPress configuration
 
-1. **Check the outputs:**
-```bash
-terraform output
-```
+## Security Measures Implemented
 
-2. **Access the web server:**
-- Copy the `apache_url` from the output
-- Open it in a web browser
-- You should see: "Hello World from [hostname]/hi!"
+1. **Network Security:**
+   - Private subnets for application and database tiers
+   - Security groups with least privilege access
+   - NAT Gateway for controlled outbound access
 
-3. **SSH into the instance (if key pair is configured):**
-```bash
-ssh -i /path/to/your-key.pem ec2-user@<public-ip>
-```
+2. **Data Protection:**
+   - RDS encryption at rest
+   - EFS encryption at rest and in transit
+   - SSL/TLS for web traffic
 
-4. **Verify Apache2 status:**
-```bash
-sudo systemctl status httpd
-```
+3. **Access Control:**
+   - IAM roles for EC2 instances
+   - Security groups for service isolation
+   - SSH access restricted to specific IP ranges
 
-## Customization Options
+4. **Monitoring:**
+   - CloudWatch logs and metrics
+   - ALB health checks
+   - Auto Scaling notifications
 
-### Variables You Can Modify
+## Deployment Instructions
 
-- **AWS Region:** Change the default region in `main.tf`
-- **Instance Type:** Modify the `instance_type` variable in the EC2 module
-- **Key Pair:** Add your EC2 key pair name for SSH access
-- **Security Group Rules:** Customize ingress/egress rules in the security group module
+1. **Clone Repository:**
+   ```bash
+   git clone <repository-url>
+   cd terraform-wordpress
+   ```
 
-### Example with Custom Variables
+2. **Configure Variables:**
+   ```bash
+   cp terraform.tfvars.example terraform.tfvars
+   # Edit terraform.tfvars with your specific values
+   ```
 
-Create a `terraform.tfvars` file:
-```hcl
-aws_region = "us-west-2"
-key_name   = "my-ec2-keypair"
-```
+3. **Initialize Terraform:**
+   ```bash
+   terraform init
+   ```
+
+4. **Plan Deployment:**
+   ```bash
+   terraform plan
+   ```
+
+5. **Apply Configuration:**
+   ```bash
+   terraform apply
+   ```
+
+6. **Access WordPress:**
+   - Use the ALB DNS name provided in outputs
+   - Complete WordPress installation wizard
+
+## Testing and Validation
+
+### Functionality Testing
+1. **WordPress Installation:** Verify WordPress loads correctly
+2. **Database Connectivity:** Confirm database connection works
+3. **File Upload:** Test file uploads to EFS
+4. **Load Balancing:** Verify traffic distribution across instances
+
+### Auto Scaling Demonstration
+1. **Load Testing:** Use tools like Apache Bench or Artillery
+2. **Monitor Scaling:** Watch CloudWatch metrics and ASG activity
+3. **Verify Performance:** Ensure application remains responsive
+
+### Security Validation
+1. **Network Access:** Verify security group rules
+2. **Database Security:** Confirm RDS is not publicly accessible
+3. **SSL/TLS:** Test HTTPS configuration if implemented
+
+## Monitoring and Maintenance
+
+1. **CloudWatch Dashboards:** Monitor key metrics
+2. **Log Aggregation:** Centralize application logs
+3. **Backup Strategy:** Verify RDS automated backups
+4. **Security Updates:** Regular AMI updates for EC2 instances
+
+## Cost Optimization
+
+1. **Reserved Instances:** Consider RIs for predictable workloads
+2. **EFS Storage Classes:** Use appropriate storage classes
+3. **Auto Scaling:** Right-size instances based on usage patterns
+4. **Monitoring:** Set up billing alerts
 
 ## Cleanup
 
-To avoid ongoing AWS charges, destroy the infrastructure when done:
-
+To destroy all resources:
 ```bash
 terraform destroy
 ```
 
-Type `yes` when prompted to confirm the destruction.
-
-## Key Concepts Learned
-
-1. **Terraform Modules:** Created reusable, modular infrastructure components
-2. **Module Communication:** Used outputs from one module as inputs to another
-3. **UserData Scripts:** Automated software installation and configuration
-4. **Security Groups:** Configured network access rules for EC2 instances
-5. **File Function:** Used Terraform's `file()` function to read external scripts
-
 ## Troubleshooting
 
-**Common Issues:**
+### Common Issues
+1. **Database Connection Errors:** Check security groups and RDS status
+2. **EFS Mount Issues:** Verify NFS security group rules
+3. **Load Balancer Health Checks:** Ensure WordPress is responding on port 80
+4. **Auto Scaling Issues:** Check launch template and IAM permissions
 
-1. **Permission Denied on UserData Script:**
-   - Ensure the script is executable: `chmod +x apache_userdata.sh`
+### Useful Commands
+```bash
+# Check Terraform state
+terraform show
 
-2. **AWS Credentials Not Found:**
-   - Run `aws configure` to set up your credentials
+# Validate configuration
+terraform validate
 
-3. **Security Group Issues:**
-   - Verify that ports 80 and 22 are open in the security group
+# Format code
+terraform fmt
 
-4. **Website Not Accessible:**
-   - Wait a few minutes for UserData script to complete
-   - Check the EC2 instance status in AWS Console
-   - Verify security group rules
+# Check outputs
+terraform output
+```
 
-## Additional Resources
+## Documentation Deliverables
 
-- [Terraform Module Documentation](https://www.terraform.io/docs/modules/index.html)
-- [AWS EC2 User Data](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html)
-- [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+This project includes comprehensive documentation covering:
+- Architecture diagrams and component explanations
+- Security measures and best practices implementation
+- Step-by-step deployment procedures
+- Testing and validation procedures
+- Troubleshooting guides and maintenance procedures
 
-## Contributing
+## Live Demonstration
 
-This is a learning project. Feel free to experiment with additional features like:
-- Auto Scaling Groups
-- Load Balancers
-- Multiple Availability Zones
-- Custom VPC configuration
+The project supports live demonstration of:
+1. **WordPress Functionality:** Full website operation
+2. **Auto Scaling:** Simulated traffic load testing
+3. **High Availability:** Instance failure recovery
+4. **Security Features:** Network isolation and access controls
 
 ---
 
-**Note:** This project is designed for educational purposes. Always follow AWS security best practices in production environments.
+**Note:** This implementation follows AWS Well-Architected Framework principles for security, reliability, performance efficiency, cost optimization, and operational excellence.
