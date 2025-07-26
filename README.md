@@ -1,317 +1,326 @@
-# Deploy and Configure Nginx Web Server using Ansible
+# Ansible Linux Server Backup and Restore
 
-![Ansible](https://img.shields.io/badge/ansible-%231A1918.svg?style=for-the-badge&logo=ansible&logoColor=white)
-![Nginx](https://img.shields.io/badge/nginx-%23009639.svg?style=for-the-badge&logo=nginx&logoColor=white)
-![Ubuntu](https://img.shields.io/badge/Ubuntu-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
+A comprehensive guide for automating file backup and restoration processes on Linux servers using Ansible. This project demonstrates how to create scalable and repeatable backup solutions through Ansible playbooks.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Installation & Setup](#installation--setup)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Testing](#testing)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
 
 ## Overview
 
-This project demonstrates how to automate the deployment and configuration of Nginx web server using Ansible. Instead of manually configuring Nginx on multiple servers, this approach uses Infrastructure as Code (IaC) principles to ensure consistent, repeatable deployments.
+This project provides a complete solution for automating backup and restore operations on Linux servers using Ansible. It includes:
+
+- Automated backup of files to designated directories
+- Restore functionality to recover files from backups
+- SSH key-based authentication setup
+- Inventory management for multiple servers
+- Testing procedures to verify backup/restore operations
+
+**Estimated Completion Time:** 2-3 hours
 
 ## Prerequisites
 
-Before starting this project, ensure you have:
+Before starting, ensure you have:
 
-- **Control Machine**: A Linux machine with Ansible installed
-- **Target Server(s)**: At least one Ubuntu/Linux server for Nginx deployment
-- **SSH Access**: Key-based authentication configured between control and target machines
-- **Network Access**: Target servers accessible from control machine
-- **Sudo Privileges**: Administrative access on target servers
-- **Text Editor**: For creating and editing Ansible playbooks
+### System Requirements
+- **Control Machine:** Linux system with Ansible installed
+- **Target Server(s):** One or more Linux servers to backup
+- **Network Access:** SSH connectivity between control machine and target servers
 
-**Estimated Time**: 2-3 hours
+### Required Tools
+- Ansible automation platform
+- SSH client and server
+- Text editor (nano, vim, or preferred editor)
+- Basic Linux command line knowledge
 
-## Project Structure
+### Access Requirements
+- SSH access to target servers
+- Sudo privileges on target servers (if needed)
+- Public key authentication capability
 
-```
-nginx-ansible-deployment/
-├── README.md
-├── inventory.ini
-├── install_nginx.yml
-├── configure_nginx.yml
-└── files/
-    └── index.html
-```
+## Installation & Setup
 
-## Step-by-Step Implementation
+### Step 1: Install Ansible on Control Machine
 
-### Step 1: Install and Configure Ansible
-
-#### 1.1 Install Ansible on Control Machine
-
+For Ubuntu/Debian systems:
 ```bash
-# Update package repository
 sudo apt update
-
-# Install Ansible
 sudo apt install ansible -y
 ```
 
-#### 1.2 Verify Installation
+For RHEL/CentOS systems:
+```bash
+sudo yum install epel-release -y
+sudo yum install ansible -y
+```
+
+### Step 2: Verify Ansible Installation
 
 ```bash
-# Check Ansible version
 ansible --version
 ```
 
-#### 1.3 Set Up SSH Key Authentication
+Expected output should show Ansible version information.
 
+### Step 3: Set Up SSH Key Authentication
+
+Generate SSH key pair:
 ```bash
-# Generate SSH key pair (if not already exists)
-ssh-keygen -t rsa -b 4096
-
-# Copy public key to target server
-ssh-copy-id user@<target-server-ip>
-
-# Test SSH connection
-ssh user@<target-server-ip>
+ssh-keygen -t rsa
 ```
 
-### Step 2: Create Ansible Inventory File
+Copy public key to target server:
+```bash
+ssh-copy-id user@target-server-ip
+```
 
-#### 2.1 Create Inventory File
+Test SSH connection:
+```bash
+ssh user@target-server-ip
+```
 
+## Configuration
+
+### Step 1: Create Ansible Inventory File
+
+Create `inventory.ini`:
 ```bash
 nano inventory.ini
 ```
 
-#### 2.2 Define Target Servers
-
+Add target server details:
 ```ini
-[web_servers]
-target ansible_host=<target-server-ip> ansible_user=<username>
-
-# Example:
-# target ansible_host=192.168.1.100 ansible_user=ubuntu
+[linux_servers]
+target ansible_host=<target-server-ip> ansible_user=<user>
 ```
 
-#### 2.3 Test Connectivity
+Replace `<target-server-ip>` and `<user>` with actual values.
+
+### Step 2: Test Inventory Connection
 
 ```bash
-# Test connection to all hosts
-ansible -i inventory.ini all -m ping
+ansible -i inventory.ini linux_servers -m ping
 ```
 
-### Step 3: Create Nginx Installation Playbook
+Expected output: `SUCCESS` status for all servers.
 
-#### 3.1 Create Installation Playbook
+## Usage
 
+### Creating Backup Playbook
+
+Create `backup.yml`:
 ```bash
-nano install_nginx.yml
+nano backup.yml
 ```
 
-#### 3.2 Playbook Content
-
+Add the following content:
 ```yaml
----
-- name: Install Nginx on the server
-  hosts: web_servers
-  become: yes
+- name: Backup files on the server
+  hosts: linux_servers
   tasks:
-    - name: Install Nginx
-      apt:
-        name: nginx
-        state: present
-        update_cache: yes
-
-    - name: Ensure Nginx is running
-      service:
-        name: nginx
-        state: started
-        enabled: yes
-```
-
-#### 3.3 Run Installation Playbook
-
-```bash
-ansible-playbook -i inventory.ini install_nginx.yml
-```
-
-### Step 4: Configure Custom Nginx Website
-
-#### 4.1 Create Configuration Playbook
-
-```bash
-nano configure_nginx.yml
-```
-
-#### 4.2 Playbook Content
-
-```yaml
----
-- name: Configure Nginx website
-  hosts: web_servers
-  become: yes
-  tasks:
-    - name: Create website root directory
+    - name: Create backup directory
       file:
-        path: /var/www/mywebsite
+        path: /backup
         state: directory
         mode: '0755'
 
-    - name: Deploy HTML content
+    - name: Copy files to backup directory
       copy:
-        content: |
-          <html>
-          <head><title>Welcome to My Website</title></head>
-          <body>
-          <h1>Hello from Nginx!</h1>
-          <p>This website was deployed using Ansible automation!</p>
-          </body>
-          </html>
-        dest: /var/www/mywebsite/index.html
+        src: /path/to/files
+        dest: /backup/
+        remote_src: yes
+```
 
-    - name: Configure Nginx server block
+**Important:** Replace `/path/to/files` with the actual path of files you want to backup.
+
+### Creating Restore Playbook
+
+Create `restore.yml`:
+```bash
+nano restore.yml
+```
+
+Add the following content:
+```yaml
+- name: Restore files from backup
+  hosts: linux_servers
+  tasks:
+    - name: Copy files back to original location
       copy:
-        content: |
-          server {
-              listen 80;
-              server_name _;
-              root /var/www/mywebsite;
-              index index.html;
-              location / {
-                  try_files $uri $uri/ =404;
-              }
-          }
-        dest: /etc/nginx/sites-available/mywebsite
-
-    - name: Enable the Nginx server block
-      file:
-        src: /etc/nginx/sites-available/mywebsite
-        dest: /etc/nginx/sites-enabled/mywebsite
-        state: link
-
-    - name: Remove default Nginx server block
-      file:
-        path: /etc/nginx/sites-enabled/default
-        state: absent
-
-    - name: Reload Nginx
-      service:
-        name: nginx
-        state: reloaded
+        src: /backup/
+        dest: /path/to/files
+        remote_src: yes
 ```
 
-#### 4.3 Run Configuration Playbook
+**Important:** Replace `/path/to/files` with the original file location.
 
+### Running the Playbooks
+
+Execute backup operation:
 ```bash
-ansible-playbook -i inventory.ini configure_nginx.yml
+ansible-playbook -i inventory.ini backup.yml
 ```
 
-### Step 5: Verify Deployment
-
-#### 5.1 Test Nginx Service
-
+Execute restore operation:
 ```bash
-# Check if Nginx is running on target server
-ansible -i inventory.ini web_servers -m shell -a "systemctl status nginx"
+ansible-playbook -i inventory.ini restore.yml
 ```
 
-#### 5.2 Test Website Access
+## Testing
 
+### Step 1: Run Backup Process
+
+Execute the backup playbook:
 ```bash
-# Test HTTP response from command line
-curl http://<target-server-ip>
-
-# Expected output: HTML content with "Hello from Nginx!"
+ansible-playbook -i inventory.ini backup.yml
 ```
 
-#### 5.3 Browser Verification
+### Step 2: Verify Backup Creation
 
-Open your web browser and navigate to:
-```
-http://<target-server-ip>
-```
-
-You should see the custom website with the message "Hello from Nginx!"
-
-## Complete Deployment Commands
-
-For a quick deployment, run these commands in sequence:
-
+Check backup directory on target server:
 ```bash
-# 1. Test connectivity
-ansible -i inventory.ini all -m ping
-
-# 2. Install Nginx
-ansible-playbook -i inventory.ini install_nginx.yml
-
-# 3. Configure website
-ansible-playbook -i inventory.ini configure_nginx.yml
-
-# 4. Verify deployment
-curl http://<target-server-ip>
+ls /backup
 ```
 
-## Key Features Implemented
+Or remotely via Ansible:
+```bash
+ansible -i inventory.ini linux_servers -m shell -a "ls -la /backup"
+```
 
-✅ **Automated Nginx Installation**: Using Ansible apt module  
-✅ **Service Management**: Ensuring Nginx starts and enables on boot  
-✅ **Custom Website Deployment**: Creating and deploying HTML content  
-✅ **Server Block Configuration**: Setting up custom Nginx server blocks  
-✅ **Default Site Removal**: Cleaning up default Nginx configuration  
-✅ **Service Reload**: Applying configuration changes without downtime  
+### Step 3: Test Restore Process
+
+Run the restore playbook:
+```bash
+ansible-playbook -i inventory.ini restore.yml
+```
+
+### Step 4: Verify Restore Success
+
+Check restored files in original location:
+```bash
+ls /path/to/files
+```
+
+Or remotely via Ansible:
+```bash
+ansible -i inventory.ini linux_servers -m shell -a "ls -la /path/to/files"
+```
+
+## Project Structure
+
+```
+ansible-backup-restore/
+├── README.md
+├── inventory.ini
+├── backup.yml
+├── restore.yml
+└── ansible.cfg (optional)
+```
+
+### File Descriptions
+
+- **inventory.ini**: Defines target servers and connection parameters
+- **backup.yml**: Ansible playbook for backup operations
+- **restore.yml**: Ansible playbook for restore operations
+- **ansible.cfg**: Optional Ansible configuration file
 
 ## Troubleshooting
 
 ### Common Issues and Solutions
 
-1. **SSH Connection Failed**
-   ```bash
-   # Ensure SSH key is added to target server
-   ssh-copy-id user@target-server-ip
-   ```
+#### SSH Connection Failed
+```bash
+# Test SSH connectivity
+ssh -v user@target-server-ip
 
-2. **Permission Denied**
-   ```bash
-   # Ensure user has sudo privileges
-   sudo usermod -aG sudo username
-   ```
+# Regenerate and copy SSH keys
+ssh-keygen -t rsa -f ~/.ssh/id_rsa
+ssh-copy-id user@target-server-ip
+```
 
-3. **Nginx Failed to Start**
-   ```bash
-   # Check Nginx configuration syntax
-   ansible -i inventory.ini web_servers -m shell -a "nginx -t"
-   ```
+#### Permission Denied Errors
+```bash
+# Add become: yes to playbook tasks
+- name: Create backup directory
+  file:
+    path: /backup
+    state: directory
+    mode: '0755'
+  become: yes
+```
 
-4. **Website Not Accessible**
-   ```bash
-   # Check if port 80 is open
-   ansible -i inventory.ini web_servers -m shell -a "ufw status"
-   ```
+#### Inventory Not Found
+```bash
+# Use absolute path for inventory
+ansible-playbook -i /full/path/to/inventory.ini backup.yml
+```
 
-## Benefits of This Approach
+#### File Path Does Not Exist
+- Verify source paths exist on target servers
+- Use `ansible -m shell -a "ls -la /path"` to check paths
+- Ensure proper permissions on source directories
 
-- **Consistency**: Same configuration across all servers
-- **Scalability**: Easy to deploy to multiple servers simultaneously
-- **Repeatability**: Playbooks can be run multiple times safely
-- **Version Control**: Configuration stored as code
-- **Documentation**: Self-documenting infrastructure
+### Debug Mode
 
-## Next Steps
+Run playbooks in verbose mode for detailed output:
+```bash
+ansible-playbook -i inventory.ini backup.yml -vvv
+```
 
-After completing this basic setup, consider:
+## Advanced Features
 
-- Adding SSL/TLS certificates using Let's Encrypt
-- Implementing load balancing across multiple servers
-- Adding monitoring and logging configuration
-- Creating roles for better playbook organization
-- Implementing CI/CD pipelines for automated deployments
+### Multiple Server Support
 
-## Learning Outcomes
+Add multiple servers to inventory:
+```ini
+[linux_servers]
+server1 ansible_host=192.168.1.10 ansible_user=admin
+server2 ansible_host=192.168.1.11 ansible_user=admin
+server3 ansible_host=192.168.1.12 ansible_user=admin
+```
 
-By completing this project, you have learned to:
+### Scheduled Backups
 
-1. ✅ Install and configure Ansible for infrastructure automation
-2. ✅ Create and manage Ansible inventory files
-3. ✅ Write Ansible playbooks for software installation
-4. ✅ Configure web servers using Infrastructure as Code
-5. ✅ Verify and troubleshoot automated deployments
+Create cron job for automated backups:
+```bash
+# Add to crontab
+0 2 * * * /usr/bin/ansible-playbook -i /path/to/inventory.ini /path/to/backup.yml
+```
 
-## Contributing
+### Compression Support
 
-Feel free to fork this project and submit pull requests for improvements or additional features.
+Add compression to backup tasks:
+```yaml
+- name: Create compressed backup
+  archive:
+    path: /path/to/files
+    dest: /backup/backup_{{ ansible_date_time.date }}.tar.gz
+    format: gz
+```
 
-## License
+## Security Considerations
 
-This project is open source and available under the [MIT License](LICENSE).
+- Use dedicated backup user accounts with minimal privileges
+- Implement proper file permissions (0755 for directories, 0644 for files)
+- Consider encrypting sensitive backup data
+- Regularly rotate SSH keys
+- Monitor backup operations through logging
+
+---
+
+**Project Completion Checklist:**
+- [ ] Ansible installed and verified
+- [ ] SSH key authentication configured
+- [ ] Inventory file created and tested
+- [ ] Backup playbook created and tested
+- [ ] Restore playbook created and tested
+- [ ] Backup/restore functionality verified
+- [ ] Documentation completed
